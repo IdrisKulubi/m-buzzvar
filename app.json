@@ -1,22 +1,31 @@
 {
   "expo": {
-    "name": "m-buzzvar",
-    "slug": "m-buzzvar",
+    "name": "Buzzvar",
+    "slug": "buzzvar",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "mbuzzvar",
+    "scheme": "buzzvar",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "This app uses location to show nearby clubs and venues."
+      },
+      "bundleIdentifier": "com.buzzvar.app"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ],
+      "package": "com.buzzvar.app"
     },
     "web": {
       "bundler": "metro",
@@ -25,6 +34,8 @@
     },
     "plugins": [
       "expo-router",
+      "expo-location",
+      "expo-secure-store",
       [
         "expo-splash-screen",
         {
@@ -37,6 +48,14 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "your-project-id-here"
+      }
     }
   }
 }
