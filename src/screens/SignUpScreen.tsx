@@ -84,6 +84,7 @@ export default function SignUpScreen({ onNavigateToLogin }: SignUpScreenProps) {
       })
 
       if (error) {
+        console.error('Sign-up error details:', JSON.stringify(error, null, 2))
         if (error.message?.includes('already registered')) {
           Alert.alert(
             'Account Exists',
@@ -104,6 +105,7 @@ export default function SignUpScreen({ onNavigateToLogin }: SignUpScreenProps) {
         )
       }
     } catch (error) {
+      console.error('Caught an unexpected error during sign-up:', JSON.stringify(error, null, 2))
       Alert.alert('Sign Up Failed', 'An unexpected error occurred')
     } finally {
       setLoading(false)

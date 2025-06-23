@@ -6,90 +6,12 @@ import { Platform } from 'react-native'
 // Configure WebBrowser for OAuth
 WebBrowser.maybeCompleteAuthSession()
 
-export interface SignUpData {
+export interface UserProfileData {
+  id: string
   email: string
-  password: string
-  name?: string
-  university?: string
-}
-
-export interface SignInData {
-  email: string
-  password: string
-}
-
-export interface UpdateProfileData {
-  name?: string
-  university?: string
-  avatar_url?: string
-}
-
-// Sign up new user
-export async function signUp({ email, password, name, university }: SignUpData) {
-  try {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          name,
-          university,
-        },
-      },
-    })
-
-    if (error) throw error
-
-    // Create user profile in users table
-    if (data.user) {
-      const { error: profileError } = await supabase
-        .from('users')
-        .insert([
-          {
-            id: data.user.id,
-            email: data.user.email!,
-            name: name || null,
-            university: university || null,
-          },
-        ])
-
-      if (profileError) {
-        // If profile creation fails, it might be because the user already exists
-        // This can happen with OAuth users, so we'll update instead
-        const { error: updateError } = await supabase
-          .from('users')
-          .upsert([
-            {
-              id: data.user.id,
-              email: data.user.email!,
-              name: name || data.user.user_metadata?.name || null,
-              university: university || null,
-            },
-          ])
-        
-        if (updateError) throw updateError
-      }
-    }
-
-    return { data, error: null }
-  } catch (error) {
-    return { data: null, error }
-  }
-}
-
-// Sign in existing user
-export async function signIn({ email, password }: SignInData) {
-  try {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-
-    if (error) throw error
-    return { data, error: null }
-  } catch (error) {
-    return { data: null, error }
-  }
+  name: string
+  university?: string | null
+  avatar_url?: string | null
 }
 
 // Sign in with Google OAuth
@@ -134,12 +56,6 @@ export async function signInWithGoogle() {
           })
 
           if (sessionError) throw sessionError
-
-          // Create or update user profile
-          if (sessionData.user) {
-            await createOrUpdateUserProfile(sessionData.user)
-          }
-
           return { data: sessionData, error: null }
         }
       }
@@ -151,23 +67,46 @@ export async function signInWithGoogle() {
   }
 }
 
-// Create or update user profile after OAuth
-async function createOrUpdateUserProfile(user: any) {
+// Create user profile
+export async function createUserProfile(profileData: UserProfileData) {
   try {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('users')
-      .upsert([
-        {
-          id: user.id,
-          email: user.email!,
-          name: user.user_metadata?.full_name || user.user_metadata?.name || null,
-          avatar_url: user.user_metadata?.avatar_url || user.user_metadata?.picture || null,
-        },
-      ])
+      .insert({
+        id: profileData.id,
+        email: profileData.email,
+        name: profileData.name,
+        university: profileData.university,
+        avatar_url: profileData.avatar_url,
+      })
+      .select()
+      .single()
 
     if (error) throw error
+    return { data, error: null }
   } catch (error) {
-    console.error('Error creating/updating user profile:', error)
+    return { data: null, error }
+  }
+}
+
+// Check if user has profile
+export async function checkUserProfile(userId: string) {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('id')
+      .eq('id', userId)
+      .single()
+
+    if (error && error.code === 'PGRST116') {
+      // Profile doesn't exist
+      return { hasProfile: false, error: null }
+    }
+
+    if (error) throw error
+    return { hasProfile: true, error: null }
+  } catch (error) {
+    return { hasProfile: false, error }
   }
 }
 
@@ -187,23 +126,6 @@ export async function getUserProfile(userId: string) {
   }
 }
 
-// Update user profile
-export async function updateUserProfile(userId: string, updates: UpdateProfileData) {
-  try {
-    const { data, error } = await supabase
-      .from('users')
-      .update(updates)
-      .eq('id', userId)
-      .select()
-      .single()
-
-    if (error) throw error
-    return { data, error: null }
-  } catch (error) {
-    return { data: null, error }
-  }
-}
-
 // Sign out
 export async function signOut() {
   try {
@@ -212,36 +134,5 @@ export async function signOut() {
     return { error: null }
   } catch (error) {
     return { error }
-  }
-}
-
-// Reset password
-export async function resetPassword(email: string) {
-  try {
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: Platform.select({
-        web: `${window?.location?.origin}/auth/reset-password`,
-        default: 'buzzvar://auth/reset-password',
-      }),
-    })
-    if (error) throw error
-    return { error: null }
-  } catch (error) {
-    return { error }
-  }
-}
-
-// Check if user exists
-export async function checkUserExists(email: string) {
-  try {
-    const { data, error } = await supabase
-      .from('users')
-      .select('id')
-      .eq('email', email)
-      .single()
-
-    return { exists: !!data, error: null }
-  } catch (error) {
-    return { exists: false, error }
   }
 } 
