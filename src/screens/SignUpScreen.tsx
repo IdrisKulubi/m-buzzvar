@@ -118,7 +118,7 @@ export default function SignUpScreen({ onNavigateToLogin }: SignUpScreenProps) {
       const { data, error } = await signInWithGoogle()
 
       if (error) {
-        Alert.alert('Google Sign Up Failed', error.message || 'An error occurred during Google sign up')
+        Alert.alert('Google Sign Up Failed', (error as any)?.message || 'An error occurred during Google sign up')
       } else if (data?.user) {
         console.log('Google sign up successful')
       }

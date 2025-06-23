@@ -147,7 +147,7 @@ export default function Button({
       ) : (
         <>
           {icon && <>{icon}</>}
-          <Text style={[getTextStyle(), icon && { marginLeft: 8 }]}>
+          <Text style={[getTextStyle(), icon && { marginLeft: 8 } as any]}>
             {title}
           </Text>
         </>

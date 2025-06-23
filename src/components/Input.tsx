@@ -122,7 +122,7 @@ export default function Input({
         )}
         
         <TextInput
-          style={[getInputStyle(), inputStyle]}
+          style={[getInputStyle(), inputStyle as any]}
           secureTextEntry={isSecure}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}

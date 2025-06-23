@@ -6,9 +6,12 @@ import {
   StyleSheet,
   Alert,
   RefreshControl,
+  useColorScheme,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Image } from 'expo-image'
+import { Ionicons } from '@expo/vector-icons'
+import { Colors } from '@/constants/Colors'
 import { useAuth } from '@/src/lib/hooks'
 import { getUserProfile } from '@/src/actions/auth'
 import { signOut } from '@/src/actions/auth'
@@ -24,6 +27,8 @@ interface UserProfile {
 }
 
 export default function HomeScreen() {
+  const colorScheme = useColorScheme() ?? 'dark'
+  const colors = Colors[colorScheme]
   const { user } = useAuth()
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
@@ -71,6 +76,125 @@ export default function HomeScreen() {
       ]
     )
   }
+
+  const styles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    loadingText: {
+      fontSize: 16,
+      color: colors.muted,
+    },
+    scrollContent: {
+      padding: 20,
+    },
+    header: {
+      alignItems: 'center',
+      marginBottom: 32,
+    },
+    title: {
+      fontSize: 32,
+      fontWeight: '700',
+      color: colors.text,
+      textAlign: 'center',
+      marginBottom: 12,
+      letterSpacing: -0.5,
+    },
+    subtitle: {
+      fontSize: 18,
+      color: colors.muted,
+      textAlign: 'center',
+      lineHeight: 26,
+    },
+    profileCard: {
+      backgroundColor: colors.surface,
+      borderRadius: 20,
+      padding: 24,
+      marginBottom: 24,
+      borderWidth: 1,
+      borderColor: colors.border,
+      elevation: 3,
+    },
+    profileHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    avatarContainer: {
+      marginRight: 16,
+    },
+    avatar: {
+      width: 60,
+      height: 60,
+      borderRadius: 30,
+      borderWidth: 2,
+      borderColor: colors.tint,
+    },
+    avatarPlaceholder: {
+      width: 60,
+      height: 60,
+      borderRadius: 30,
+      backgroundColor: colors.tint,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    avatarText: {
+      fontSize: 24,
+      fontWeight: '700',
+      color: colors.background,
+    },
+    profileInfo: {
+      flex: 1,
+    },
+    profileName: {
+      fontSize: 20,
+      fontWeight: '700',
+      color: colors.text,
+      marginBottom: 4,
+    },
+    profileEmail: {
+      fontSize: 14,
+      color: colors.muted,
+      marginBottom: 4,
+    },
+    profileUniversity: {
+      fontSize: 14,
+      color: colors.tint,
+      fontWeight: '600',
+    },
+    featuresCard: {
+      backgroundColor: colors.surface,
+      borderRadius: 20,
+      padding: 24,
+      marginBottom: 24,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    featuresTitle: {
+      fontSize: 24,
+      fontWeight: '700',
+      color: colors.text,
+      marginBottom: 20,
+    },
+    featuresList: {
+      gap: 16,
+    },
+    featureItem: {
+      fontSize: 16,
+      color: colors.text,
+      lineHeight: 24,
+      fontWeight: '500',
+    },
+    signOutButton: {
+      marginTop: 20,
+      marginBottom: 40,
+    },
+  })
 
   useEffect(() => {
     loadProfile()
@@ -154,122 +278,4 @@ export default function HomeScreen() {
       </ScrollView>
     </SafeAreaView>
   )
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f8fafc',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    fontSize: 16,
-    color: '#6b7280',
-  },
-  scrollContent: {
-    padding: 20,
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#6b7280',
-    textAlign: 'center',
-  },
-  profileCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  profileHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  avatarContainer: {
-    marginRight: 16,
-  },
-  avatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-  },
-  avatarPlaceholder: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#ef4444',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#ffffff',
-  },
-  profileInfo: {
-    flex: 1,
-  },
-  profileName: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    marginBottom: 4,
-  },
-  profileEmail: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginBottom: 4,
-  },
-  profileUniversity: {
-    fontSize: 14,
-    color: '#ef4444',
-    fontWeight: '500',
-  },
-  featuresCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  featuresTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    marginBottom: 16,
-  },
-  featuresList: {
-    gap: 12,
-  },
-  featureItem: {
-    fontSize: 16,
-    color: '#6b7280',
-    lineHeight: 24,
-  },
-  signOutButton: {
-    marginTop: 20,
-  },
-}) 
+} 

@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 
-export default function ExploreScreen() {
+export default function GroupsScreen() {
   const colorScheme = useColorScheme() ?? 'dark';
   const colors = Colors[colorScheme];
 
@@ -79,9 +79,9 @@ export default function ExploreScreen() {
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Text style={styles.title}>Explore</Text>
+          <Text style={styles.title}>Groups</Text>
           <Text style={styles.subtitle}>
-            Discover clubs, venues, and events in your area
+            Connect with party groups and plan amazing events together
           </Text>
         </View>
 
@@ -91,37 +91,37 @@ export default function ExploreScreen() {
           <View style={styles.featuresList}>
             <View style={styles.featureItem}>
               <View style={styles.featureIcon}>
-                <Ionicons name="storefront" size={20} color={colors.background} />
+                <Ionicons name="people" size={20} color={colors.background} />
               </View>
-              <Text style={styles.featureText}>Discover nearby clubs and venues</Text>
+              <Text style={styles.featureText}>Create and join party groups</Text>
             </View>
 
             <View style={styles.featureItem}>
               <View style={styles.featureIcon}>
-                <Ionicons name="map" size={20} color={colors.background} />
+                <Ionicons name="chatbubbles" size={20} color={colors.background} />
               </View>
-              <Text style={styles.featureText}>Interactive map view</Text>
+              <Text style={styles.featureText}>Group chat and coordination</Text>
             </View>
 
             <View style={styles.featureItem}>
               <View style={styles.featureIcon}>
-                <Ionicons name="filter" size={20} color={colors.background} />
+                <Ionicons name="calendar" size={20} color={colors.background} />
               </View>
-              <Text style={styles.featureText}>Filter by music, vibe, and distance</Text>
+              <Text style={styles.featureText}>Plan events and parties</Text>
+            </View>
+
+            <View style={styles.featureItem}>
+              <View style={styles.featureIcon}>
+                <Ionicons name="location" size={20} color={colors.background} />
+              </View>
+              <Text style={styles.featureText}>Share locations and meetups</Text>
             </View>
 
             <View style={styles.featureItem}>
               <View style={styles.featureIcon}>
                 <Ionicons name="star" size={20} color={colors.background} />
               </View>
-              <Text style={styles.featureText}>Reviews and ratings</Text>
-            </View>
-
-            <View style={styles.featureItem}>
-              <View style={styles.featureIcon}>
-                <Ionicons name="bookmark" size={20} color={colors.background} />
-              </View>
-              <Text style={styles.featureText}>Save your favorite spots</Text>
+              <Text style={styles.featureText}>Rate and review venues</Text>
             </View>
           </View>
         </View>

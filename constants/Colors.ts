@@ -39,6 +39,7 @@ export const Colors = {
     muted: 'oklch(0.65 0.02 83.77)', // Muted text
     accent: accentGold,
     secondary: lightGold,
+    destructive: orangeRed,
   },
   dark: {
     text: pureWhite,
@@ -53,6 +54,7 @@ export const Colors = {
     muted: 'oklch(0.65 0.04 83.77)', // Muted gold text
     accent: accentGold,
     secondary: 'oklch(0.25 0.02 83.77)', // Dark secondary
+    destructive: orangeRed,
   },
   // Rainbow accents for special components
   rainbow: {

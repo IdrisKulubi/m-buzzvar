@@ -23,11 +23,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
-    // Configure OAuth redirect URLs
-    redirectTo: Platform.select({
-      web: `${window?.location?.origin}/auth/callback`,
-      default: 'buzzvar://auth/callback',
-    }),
   },
 })
 

@@ -76,7 +76,7 @@ export default function LoginScreen({
       const { data, error } = await signInWithGoogle()
 
       if (error) {
-        Alert.alert('Google Login Failed', error.message || 'An error occurred during Google login')
+        Alert.alert('Google Login Failed', (error as any)?.message || 'An error occurred during Google login')
       } else if (data?.user) {
         console.log('Google login successful')
       }

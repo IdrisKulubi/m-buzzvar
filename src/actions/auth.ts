@@ -21,7 +21,7 @@ export async function signInWithGoogle() {
     
     const redirectUrl = AuthSession.makeRedirectUri({
       useProxy: true,
-    });
+    } as any);
     console.log('🔵 Redirect URL:', redirectUrl);
 
     const { data, error } = await supabase.auth.signInWithOAuth({
@@ -200,6 +200,67 @@ export async function getUserProfile(userId: string) {
     return { data, error: null }
   } catch (error) {
     return { data: null, error }
+  }
+}
+
+// Update user profile
+export async function updateUserProfile(userId: string, updates: Partial<Pick<UserProfileData, 'name' | 'university' | 'avatar_url'>>) {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .update(updates)
+      .eq('id', userId)
+      .select()
+      .single()
+
+    if (error) throw error
+    return { data, error: null }
+  } catch (error) {
+    return { data: null, error }
+  }
+}
+
+// Sign in with email/password
+export async function signIn({ email, password }: { email: string; password: string }) {
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+    if (error) throw error
+    return { data, error: null }
+  } catch (error) {
+    return { data: null, error }
+  }
+}
+
+// Sign up with email/password
+export async function signUp({ email, password, name }: { email: string; password: string; name: string }) {
+  try {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          name,
+        },
+      },
+    })
+    if (error) throw error
+    return { data, error: null }
+  } catch (error) {
+    return { data: null, error }
+  }
+}
+
+// Reset password
+export async function resetPassword(email: string) {
+  try {
+    const { error } = await supabase.auth.resetPasswordForEmail(email)
+    if (error) throw error
+    return { error: null }
+  } catch (error) {
+    return { error }
   }
 }
 

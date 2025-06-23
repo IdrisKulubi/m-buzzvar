@@ -24,7 +24,7 @@ export default function LoginPage() {
 
       if (error) {
         console.error('🔴 Login: Google login error:', JSON.stringify(error, null, 2));
-        Alert.alert('Login Failed', error.message || 'An error occurred during Google login');
+        Alert.alert('Login Failed', (error as any)?.message || 'An error occurred during Google login');
       } else if (data?.user) {
         console.log('🟢 Login: Google login successful for user:', data.user.email);
         console.log('🔵 Login: User will be redirected to profile setup or main app based on profile status');
