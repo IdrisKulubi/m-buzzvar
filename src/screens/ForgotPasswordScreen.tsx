@@ -48,7 +48,7 @@ export default function ForgotPasswordScreen({
       const { error } = await resetPassword(email.trim())
 
       if (error) {
-        setError(error.message || 'An error occurred while sending reset email')
+        setError((error as any)?.message || 'An error occurred while sending reset email')
       } else {
         setEmailSent(true)
       }

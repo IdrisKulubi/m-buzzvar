@@ -73,7 +73,7 @@ export default function InitialScreen() {
         />
         <Text style={styles.appName}>Buzzvar</Text>
       </View>
-      <ActivityIndicator size="large" color="oklch(0.83 0.1 83.77)" style={styles.loader} />
+      <ActivityIndicator size="large" color="#D4AF37" style={styles.loader} />
       <Text style={styles.loadingText}>Crunching the data up...</Text>
     </View>
   );

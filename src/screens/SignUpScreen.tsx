@@ -80,12 +80,11 @@ export default function SignUpScreen({ onNavigateToLogin }: SignUpScreenProps) {
         email: formData.email.trim(),
         password: formData.password,
         name: formData.name.trim(),
-        university: formData.university.trim() || undefined,
       })
 
       if (error) {
         console.error('Sign-up error details:', JSON.stringify(error, null, 2))
-        if (error.message?.includes('already registered')) {
+        if ((error as any)?.message?.includes('already registered')) {
           Alert.alert(
             'Account Exists',
             'An account with this email already exists. Please sign in instead.',
@@ -95,7 +94,7 @@ export default function SignUpScreen({ onNavigateToLogin }: SignUpScreenProps) {
             ]
           )
         } else {
-          Alert.alert('Sign Up Failed', error.message || 'An error occurred during sign up')
+          Alert.alert('Sign Up Failed', (error as any)?.message || 'An error occurred during sign up')
         }
       } else if (data?.user) {
         Alert.alert(

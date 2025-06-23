@@ -95,9 +95,9 @@ export default function LoginPage() {
           </View>
 
           {/* Decorative Gold Accents */}
-          <View style={[styles.goldAccent1, { backgroundColor: 'oklch(0.83 0.1 83.77)' }]} />
-          <View style={[styles.goldAccent2, { backgroundColor: 'oklch(0.83 0.1 83.77)' }]} />
-          <View style={[styles.goldAccent3, { backgroundColor: 'oklch(0.83 0.1 83.77)' }]} />
+          <View style={[styles.goldAccent1, { backgroundColor: colors.tint }]} />
+          <View style={[styles.goldAccent2, { backgroundColor: colors.tint }]} />
+          <View style={[styles.goldAccent3, { backgroundColor: colors.tint }]} />
         </LinearGradient>
       </SafeAreaView>
     </>
@@ -126,8 +126,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderRadius: 70,
     borderWidth: 2,
-    borderColor: 'oklch(0.83 0.1 83.77)',
-    shadowColor: 'oklch(0.83 0.1 83.77)',
+    borderColor: '#D4AF37',
+    shadowColor: '#D4AF37',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.4,
     shadowRadius: 20,

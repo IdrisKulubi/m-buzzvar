@@ -58,7 +58,7 @@ export default function LoginScreen({
       const { data, error } = await signIn({ email: email.trim(), password })
 
       if (error) {
-        Alert.alert('Login Failed', error.message || 'An error occurred during login')
+        Alert.alert('Login Failed', (error as any)?.message || 'An error occurred during login')
       } else if (data?.user) {
         // Success - navigation will be handled by the auth state change
         console.log('Login successful')

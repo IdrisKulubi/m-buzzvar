@@ -222,6 +222,9 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <Text style={styles.title}>Welcome to Buzzvar! 🎉</Text>
           <Text style={styles.subtitle}>Your party planning companion</Text>
+          <Text style={[styles.subtitle, { marginTop: 8, fontSize: 12 }]}>
+            Theme: {colorScheme} | Colors: {colors.text} | BG: {colors.background}
+          </Text>
         </View>
 
         {/* User Profile Card */}

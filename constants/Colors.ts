@@ -8,52 +8,56 @@
  * Features a rich gold primary color with deep black/white contrast
  */
 
-// Primary Gold Color
-const primaryGold = 'oklch(0.83 0.1 83.77)'; // Rich, warm gold
-const lightGold = 'oklch(0.95 0.03 83.77)'; // Light gold tint
-const mutedGold = 'oklch(0.97 0.02 83.77)'; // Very subtle gold tint
-const accentGold = 'oklch(0.90 0.05 83.77)'; // Medium gold tint
+// Primary Gold Colors (converted to hex for compatibility)
+const primaryGold = '#D4AF37'; // Rich, warm gold
+const lightGold = '#F5E6A3'; // Light gold tint
+const mutedGold = '#FAF7E8'; // Very subtle gold tint
+const accentGold = '#E6C547'; // Medium gold tint
+const darkGold = '#B8941F'; // Darker gold for better contrast
 
 // Core Neutrals
-const pureWhite = 'oklch(1 0 0)'; // Pure white
-const deepBlack = 'oklch(0.145 0 0)'; // Deep black
+const pureWhite = '#FFFFFF'; // Pure white
+const deepBlack = '#0A0A0A'; // Deep black
+const lightGray = '#F8F9FA'; // Light gray
+const darkGray = '#1A1A1A'; // Dark gray
+const mediumGray = '#6B7280'; // Medium gray
 
 // Rainbow Accent Colors
-const orangeRed = 'oklch(66.2% 0.225 25.9)';
-const purple = 'oklch(60.4% 0.26 302)';
-const blue = 'oklch(69.6% 0.165 251)';
-const lightBlue = 'oklch(80.2% 0.134 225)';
-const green = 'oklch(90.7% 0.231 133)';
+const orangeRed = '#FF6B35';
+const purple = '#8B5CF6';
+const blue = '#3B82F6';
+const lightBlue = '#06B6D4';
+const green = '#10B981';
 
 export const Colors = {
   light: {
     text: deepBlack,
     background: pureWhite,
     tint: primaryGold,
-    icon: 'oklch(0.45 0.02 83.77)', // Darker gold for icons
-    tabIconDefault: 'oklch(0.55 0.02 83.77)', // Medium gold for inactive tabs
+    icon: darkGold, // Darker gold for better contrast
+    tabIconDefault: mediumGray, // Gray for inactive tabs
     tabIconSelected: primaryGold,
     // Additional colors for premium look
-    surface: mutedGold, // Very subtle gold background for cards
-    border: 'oklch(0.85 0.05 83.77)', // Light gold borders
-    muted: 'oklch(0.65 0.02 83.77)', // Muted text
+    surface: lightGray, // Light background for cards
+    border: '#E5E7EB', // Light borders
+    muted: mediumGray, // Muted text
     accent: accentGold,
     secondary: lightGold,
     destructive: orangeRed,
   },
   dark: {
-    text: pureWhite,
-    background: deepBlack,
-    tint: primaryGold,
-    icon: 'oklch(0.75 0.08 83.77)', // Lighter gold for dark mode icons
-    tabIconDefault: 'oklch(0.65 0.06 83.77)', // Medium gold for inactive tabs
+    text: pureWhite, // Pure white text for maximum contrast
+    background: deepBlack, // Deep black background
+    tint: primaryGold, // Gold accent
+    icon: primaryGold, // Gold icons for visibility
+    tabIconDefault: '#9CA3AF', // Light gray for inactive tabs
     tabIconSelected: primaryGold,
     // Additional colors for premium dark look
-    surface: 'oklch(0.18 0.01 83.77)', // Very dark with subtle gold tint
-    border: 'oklch(0.25 0.03 83.77)', // Dark gold borders
-    muted: 'oklch(0.65 0.04 83.77)', // Muted gold text
+    surface: darkGray, // Dark surface with good contrast
+    border: '#374151', // Visible dark borders
+    muted: '#D1D5DB', // Light gray for muted text - much more visible
     accent: accentGold,
-    secondary: 'oklch(0.25 0.02 83.77)', // Dark secondary
+    secondary: '#2D2D2D', // Dark secondary
     destructive: orangeRed,
   },
   // Rainbow accents for special components
@@ -67,7 +71,7 @@ export const Colors = {
   // Semantic colors
   semantic: {
     success: green,
-    warning: 'oklch(0.75 0.15 65)', // Yellow-orange
+    warning: '#F59E0B', // Yellow-orange
     error: orangeRed,
     info: blue,
   },
