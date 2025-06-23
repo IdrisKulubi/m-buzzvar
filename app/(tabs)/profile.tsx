@@ -33,6 +33,7 @@ export default function ProfileScreen() {
   const { user } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [signingOut, setSigningOut] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(colorScheme === 'dark');
 
   const loadProfile = async () => {
@@ -66,9 +67,25 @@ export default function ProfileScreen() {
           text: 'Sign Out',
           style: 'destructive',
           onPress: async () => {
-            const { error } = await signOut();
-            if (error) {
-              Alert.alert('Error', 'Failed to sign out. Please try again.');
+            try {
+              setSigningOut(true);
+              console.log('🔵 Profile: Starting sign out...');
+              const { error } = await signOut();
+              
+              if (error) {
+                console.error('🔴 Profile: Sign out error:', error);
+                Alert.alert('Error', 'Failed to sign out. Please try again.');
+              } else {
+                console.log('🟢 Profile: Sign out successful, navigation will be handled by auth state change');
+                console.log('🔵 Profile: Waiting for auth state change to trigger navigation to login...');
+                // The useAuth hook will detect the auth state change and redirect to login
+                // The main index.tsx will handle the navigation
+              }
+            } catch (error) {
+              console.error('🔴 Profile: Unexpected sign out error:', error);
+              Alert.alert('Error', 'An unexpected error occurred during sign out.');
+            } finally {
+              setSigningOut(false);
             }
           },
         },
@@ -397,12 +414,14 @@ export default function ProfileScreen() {
 
         {/* Sign Out Button */}
         <Button
-          title="Sign Out"
+          title={signingOut ? "Signing Out..." : "Sign Out"}
           onPress={handleSignOut}
           variant="outline"
           fullWidth
+          loading={signingOut}
+          disabled={signingOut}
           style={styles.signOutButton}
-          icon={<Ionicons name="log-out-outline" size={16} color={colors.tint} />}
+          icon={!signingOut && <Ionicons name="log-out-outline" size={16} color={colors.tint} />}
         />
       </ScrollView>
     </SafeAreaView>

@@ -267,10 +267,21 @@ export async function resetPassword(email: string) {
 // Sign out
 export async function signOut() {
   try {
-    const { error } = await supabase.auth.signOut()
-    if (error) throw error
-    return { error: null }
+    console.log('🔵 Auth: Starting sign out process...');
+    
+    // Clear the session from Supabase
+    const { error } = await supabase.auth.signOut();
+    
+    if (error) {
+      console.error('🔴 Auth: Sign out error:', JSON.stringify(error, null, 2));
+      throw error;
+    }
+    
+    console.log('🟢 Auth: Sign out successful - session cleared');
+    console.log('🔵 Auth: Auth state change should trigger navigation to login');
+    return { error: null };
   } catch (error) {
-    return { error }
+    console.error('🔴 Auth: Sign out failed:', JSON.stringify(error, null, 2));
+    return { error };
   }
 } 

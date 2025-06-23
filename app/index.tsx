@@ -8,14 +8,13 @@ import AnimatedSplashScreen from '@/src/components/AnimatedSplashScreen';
 export default function InitialScreen() {
   const { user, loading } = useAuth();
   const [showSplash, setShowSplash] = useState(true);
-  const [isNavigating, setIsNavigating] = useState(false);
+  const [hasNavigated, setHasNavigated] = useState(false);
 
-  const handleNavigation = async () => {
-    console.log('🔵 Index: Navigation check - loading:', loading, 'user:', !!user);
+  const performNavigation = async () => {
+    console.log('🔵 Index: Performing navigation - loading:', loading, 'user:', !!user);
+    console.log('🔵 Index: Current router state before navigation');
     
-    if (!loading && !isNavigating) {
-      setIsNavigating(true);
-      
+    try {
       if (user) {
         console.log('🔵 Index: User authenticated, checking profile for:', user.email);
         
@@ -24,6 +23,10 @@ export default function InitialScreen() {
         
         if (error) {
           console.error('🔴 Index: Error checking profile:', JSON.stringify(error, null, 2));
+          // On error, still try to navigate to setup
+          console.log('🟡 Index: Profile check failed, navigating to setup');
+          router.replace('/setup-profile');
+          return;
         }
         
         console.log('🔵 Index: Profile check result - hasProfile:', hasProfile);
@@ -40,21 +43,44 @@ export default function InitialScreen() {
       } else {
         // User is not authenticated, go to login
         console.log('🔵 Index: No user, navigating to login');
+        console.log('🔵 Index: About to call router.replace("/login")');
+        router.replace('/login');
+        console.log('🔵 Index: router.replace("/login") called');
+      }
+    } catch (error) {
+      console.error('🔴 Index: Navigation error:', error);
+      // Fallback navigation
+      if (user) {
+        router.replace('/setup-profile');
+      } else {
         router.replace('/login');
       }
     }
   };
 
+  // Main navigation effect - triggers on auth state changes
   useEffect(() => {
-    // Only start navigation logic after splash animation is complete
-    if (!showSplash) {
-      handleNavigation();
+    console.log('🔵 Index: Auth state changed - loading:', loading, 'user:', !!user, 'showSplash:', showSplash, 'hasNavigated:', hasNavigated);
+    
+    // Navigate when auth state is determined and splash is complete
+    // OR when auth state changes after initial navigation (like sign out)
+    if (!loading && (!showSplash || hasNavigated)) {
+      console.log('🔵 Index: Ready to navigate, performing navigation...');
+      performNavigation();
     }
   }, [user, loading, showSplash]);
+
+  // Reset navigation flag when auth state changes (for smooth transitions)
+  useEffect(() => {
+    if (!loading) {
+      setHasNavigated(false);
+    }
+  }, [user, loading]);
 
   const handleAnimationComplete = () => {
     console.log('🎬 Index: Splash animation completed');
     setShowSplash(false);
+    setHasNavigated(true);
   };
 
   // Show animated splash screen first
@@ -74,7 +100,13 @@ export default function InitialScreen() {
         <Text style={styles.appName}>Buzzvar</Text>
       </View>
       <ActivityIndicator size="large" color="#D4AF37" style={styles.loader} />
-      <Text style={styles.loadingText}>Crunching the data up...</Text>
+      <Text style={styles.loadingText}>
+        {loading ? 'Loading your session...' : 'Navigating...'}
+      </Text>
+      {/* Debug info */}
+      <Text style={styles.debugText}>
+        Loading: {loading.toString()} | User: {user ? 'Yes' : 'No'} | Splash: {showSplash.toString()}
+      </Text>
     </View>
   );
 }
@@ -108,5 +140,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#b3b3b3',
     letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  debugText: {
+    fontSize: 12,
+    color: '#666666',
+    textAlign: 'center',
+    marginTop: 8,
   },
 }); 

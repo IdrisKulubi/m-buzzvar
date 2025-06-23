@@ -33,6 +33,7 @@ export default function HomeScreen() {
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
 
   const loadProfile = async () => {
     if (!user) return
@@ -67,14 +68,30 @@ export default function HomeScreen() {
           text: 'Sign Out',
           style: 'destructive',
           onPress: async () => {
-            const { error } = await signOut()
-            if (error) {
-              Alert.alert('Error', 'Failed to sign out. Please try again.')
+            try {
+              setSigningOut(true);
+              console.log('🔵 Home: Starting sign out...');
+              const { error } = await signOut();
+              
+              if (error) {
+                console.error('🔴 Home: Sign out error:', error);
+                Alert.alert('Error', 'Failed to sign out. Please try again.');
+              } else {
+                console.log('🟢 Home: Sign out successful, navigation will be handled by auth state change');
+                console.log('🔵 Home: Waiting for auth state change to trigger navigation to login...');
+                // The useAuth hook will detect the auth state change and redirect to login
+                // The main index.tsx will handle the navigation
+              }
+            } catch (error) {
+              console.error('🔴 Home: Unexpected sign out error:', error);
+              Alert.alert('Error', 'An unexpected error occurred during sign out.');
+            } finally {
+              setSigningOut(false);
             }
           },
         },
       ]
-    )
+    );
   }
 
   const styles = StyleSheet.create({
@@ -272,10 +289,12 @@ export default function HomeScreen() {
 
         {/* Sign Out Button */}
         <Button
-          title="Sign Out"
+          title={signingOut ? "Signing Out..." : "Sign Out"}
           onPress={handleSignOut}
           variant="outline"
           fullWidth
+          loading={signingOut}
+          disabled={signingOut}
           style={styles.signOutButton}
         />
       </ScrollView>

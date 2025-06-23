@@ -57,9 +57,14 @@ export default function SetupProfilePage() {
         console.error('🔴 ProfileSetup: Profile creation failed:', JSON.stringify(error, null, 2));
         Alert.alert('Error', 'Failed to save profile. Please try again.');
       } else {
-        console.log('🟢 ProfileSetup: Profile created successfully, navigating to main app');
-        // Profile created successfully, navigate to main app
-        router.replace('/(tabs)');
+        console.log('🟢 ProfileSetup: Profile created successfully');
+        console.log('🔵 ProfileSetup: Triggering navigation to main app...');
+        
+        // Small delay to ensure profile is saved, then navigate
+        setTimeout(() => {
+          console.log('🔵 ProfileSetup: Navigating to main app');
+          router.replace('/(tabs)');
+        }, 500);
       }
     } catch (error) {
       console.error('🔴 ProfileSetup: Unexpected error:', JSON.stringify(error, null, 2));

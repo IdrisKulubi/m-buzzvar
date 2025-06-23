@@ -10,30 +10,100 @@ export function useAuth() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    let isMounted = true;
+
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      setUser(session?.user ?? null)
-      setLoading(false)
-    })
+    const getInitialSession = async () => {
+      try {
+        console.log('🔵 Auth: Getting initial session...');
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('🔴 Auth: Error getting initial session:', error);
+        }
+        
+        if (isMounted) {
+          console.log('🔵 Auth: Initial session loaded, user:', !!session?.user);
+          setSession(session);
+          setUser(session?.user ?? null);
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error('🔴 Auth: Exception getting initial session:', error);
+        if (isMounted) {
+          setSession(null);
+          setUser(null);
+          setLoading(false);
+        }
+      }
+    };
+
+    getInitialSession();
 
     // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session)
-      setUser(session?.user ?? null)
-      setLoading(false)
-    })
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('🔵 Auth: Auth state change -', event, 'session:', !!session);
+      
+      if (isMounted) {
+        setSession(session);
+        setUser(session?.user ?? null);
+        setLoading(false);
+        
+        // Log user state changes for debugging
+        if (event === 'SIGNED_OUT') {
+          console.log('🟢 Auth: User signed out successfully, clearing state');
+          console.log('🔵 Auth: Auth state change should trigger navigation to login');
+        } else if (event === 'SIGNED_IN') {
+          console.log('🟢 Auth: User signed in:', session?.user?.email);
+        } else if (event === 'TOKEN_REFRESHED') {
+          console.log('🔵 Auth: Token refreshed for:', session?.user?.email);
+        }
+      }
+    });
 
-    return () => subscription.unsubscribe()
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, [])
+
+  const handleSignOut = async () => {
+    try {
+      console.log('🔵 useAuth: Starting sign out...');
+      
+      // Immediately clear local state for instant UI feedback
+      setLoading(true);
+      
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        console.error('🔴 useAuth: Sign out error:', error);
+        // Reset loading state on error
+        setLoading(false);
+        throw error;
+      }
+      
+      // Clear local state immediately (auth state change will also trigger)
+      console.log('🟢 useAuth: Sign out successful, clearing local state');
+      setSession(null);
+      setUser(null);
+      setLoading(false);
+      
+      return { error: null };
+    } catch (error) {
+      console.error('🔴 useAuth: Sign out failed:', error);
+      setLoading(false);
+      return { error };
+    }
+  };
 
   return {
     session,
     user,
     loading,
-    signOut: () => supabase.auth.signOut(),
+    signOut: handleSignOut,
   }
 }
 
