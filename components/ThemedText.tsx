@@ -16,11 +16,12 @@ export function ThemedText({
   ...rest
 }: ThemedTextProps) {
   const color = useThemeColor({ light: lightColor, dark: darkColor }, 'text');
+  const tintColor = useThemeColor({ light: lightColor, dark: darkColor }, 'tint');
 
   return (
     <Text
       style={[
-        { color },
+        { color: type === 'link' ? tintColor : color },
         type === 'default' ? styles.default : undefined,
         type === 'title' ? styles.title : undefined,
         type === 'defaultSemiBold' ? styles.defaultSemiBold : undefined,
@@ -37,24 +38,31 @@ const styles = StyleSheet.create({
   default: {
     fontSize: 16,
     lineHeight: 24,
+    letterSpacing: 0.1,
   },
   defaultSemiBold: {
     fontSize: 16,
     lineHeight: 24,
     fontWeight: '600',
+    letterSpacing: 0.1,
   },
   title: {
     fontSize: 32,
-    fontWeight: 'bold',
-    lineHeight: 32,
+    fontWeight: '700',
+    lineHeight: 38,
+    letterSpacing: -0.5,
   },
   subtitle: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: '600',
+    lineHeight: 28,
+    letterSpacing: 0.2,
   },
   link: {
     lineHeight: 30,
     fontSize: 16,
-    color: '#0a7ea4',
+    fontWeight: '600',
+    letterSpacing: 0.1,
+    // Color will be handled by tintColor above
   },
 });

@@ -6,7 +6,9 @@ import {
   TouchableOpacityProps,
   ViewStyle,
   TextStyle,
+  useColorScheme,
 } from 'react-native'
+import { Colors } from '../../constants/Colors'
 
 interface ButtonProps extends TouchableOpacityProps {
   title: string
@@ -31,40 +33,54 @@ export default function Button({
   style,
   ...props
 }: ButtonProps) {
+  const colorScheme = useColorScheme() ?? 'dark' // Default to dark for premium look
+  const colors = Colors[colorScheme]
+
   const getButtonStyle = (): ViewStyle => {
     const baseStyle: ViewStyle = {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      borderRadius: 12,
+      borderRadius: 16, // More rounded for premium look
       opacity: disabled || loading ? 0.6 : 1,
     }
 
     // Size styles
     const sizeStyles: Record<string, ViewStyle> = {
-      small: { paddingHorizontal: 16, paddingVertical: 8, minHeight: 36 },
-      medium: { paddingHorizontal: 24, paddingVertical: 12, minHeight: 48 },
-      large: { paddingHorizontal: 32, paddingVertical: 16, minHeight: 56 },
+      small: { paddingHorizontal: 16, paddingVertical: 10, minHeight: 40 },
+      medium: { paddingHorizontal: 24, paddingVertical: 14, minHeight: 52 },
+      large: { paddingHorizontal: 32, paddingVertical: 18, minHeight: 60 },
     }
 
-    // Variant styles
+    // Variant styles with new color scheme
     const variantStyles: Record<string, ViewStyle> = {
-      primary: { backgroundColor: '#ef4444' },
-      secondary: { backgroundColor: '#64748b' },
+      primary: { 
+        backgroundColor: colors.tint, // Primary gold
+        shadowColor: colors.tint,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 8,
+      },
+      secondary: { 
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.border,
+      },
       outline: { 
         backgroundColor: 'transparent', 
         borderWidth: 2, 
-        borderColor: '#ef4444' 
+        borderColor: colors.tint,
       },
       google: { 
-        backgroundColor: '#ffffff', 
+        backgroundColor: colorScheme === 'dark' ? '#ffffff' : '#ffffff',
         borderWidth: 1, 
-        borderColor: '#e5e7eb',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 2,
-        elevation: 2,
+        borderColor: colorScheme === 'dark' ? '#e5e7eb' : '#e5e7eb',
+        shadowColor: colorScheme === 'dark' ? colors.tint : '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: colorScheme === 'dark' ? 0.3 : 0.15,
+        shadowRadius: 8,
+        elevation: 8,
       },
     }
 
@@ -89,11 +105,11 @@ export default function Button({
       large: { fontSize: 18 },
     }
 
-    // Variant styles
+    // Variant styles with new color scheme
     const variantStyles: Record<string, TextStyle> = {
-      primary: { color: '#ffffff' },
-      secondary: { color: '#ffffff' },
-      outline: { color: '#ef4444' },
+      primary: { color: colorScheme === 'dark' ? colors.background : colors.background },
+      secondary: { color: colors.text },
+      outline: { color: colors.tint },
       google: { color: '#374151' },
     }
 
@@ -101,6 +117,17 @@ export default function Button({
       ...baseStyle,
       ...sizeStyles[size],
       ...variantStyles[variant],
+    }
+  }
+
+  const getLoadingColor = () => {
+    switch (variant) {
+      case 'primary':
+        return colorScheme === 'dark' ? colors.background : colors.background
+      case 'outline':
+        return colors.tint
+      default:
+        return colors.text
     }
   }
 
@@ -114,7 +141,7 @@ export default function Button({
     >
       {loading ? (
         <ActivityIndicator
-          color={variant === 'primary' || variant === 'secondary' ? '#ffffff' : '#ef4444'}
+          color={getLoadingColor()}
           size="small"
         />
       ) : (
