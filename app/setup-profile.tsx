@@ -13,7 +13,16 @@ export default function SetupProfilePage() {
   const [university, setUniversity] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Log when user arrives at profile setup
+  React.useEffect(() => {
+    console.log('🟡 ProfileSetup: User arrived at profile setup page');
+    console.log('🔵 ProfileSetup: User email:', user?.email);
+    console.log('🔵 ProfileSetup: Pre-filled name:', name);
+  }, []);
+
   const handleSaveProfile = async () => {
+    console.log('🔵 ProfileSetup: Starting profile creation...');
+    
     if (!name.trim()) {
       Alert.alert('Name Required', 'Please enter your name to continue');
       return;
@@ -26,6 +35,12 @@ export default function SetupProfilePage() {
 
     setLoading(true);
     try {
+      console.log('🔵 ProfileSetup: Creating profile with data:', {
+        name: name.trim(),
+        university: university.trim() || null,
+        email: user.email,
+      });
+
       const { error } = await createUserProfile({
         id: user.id,
         email: user.email!,
@@ -35,15 +50,16 @@ export default function SetupProfilePage() {
       });
 
       if (error) {
+        console.error('🔴 ProfileSetup: Profile creation failed:', JSON.stringify(error, null, 2));
         Alert.alert('Error', 'Failed to save profile. Please try again.');
-        console.error('Profile creation error:', error);
       } else {
+        console.log('🟢 ProfileSetup: Profile created successfully, navigating to main app');
         // Profile created successfully, navigate to main app
         router.replace('/(tabs)');
       }
     } catch (error) {
+      console.error('🔴 ProfileSetup: Unexpected error:', JSON.stringify(error, null, 2));
       Alert.alert('Error', 'An unexpected error occurred');
-      console.error('Profile setup error:', error);
     } finally {
       setLoading(false);
     }

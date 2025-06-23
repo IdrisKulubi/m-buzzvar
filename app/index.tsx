@@ -9,20 +9,33 @@ export default function InitialScreen() {
 
   useEffect(() => {
     const handleNavigation = async () => {
+      console.log('🔵 Index: Navigation check - loading:', loading, 'user:', !!user);
+      
       if (!loading) {
         if (user) {
+          console.log('🔵 Index: User authenticated, checking profile for:', user.email);
+          
           // User is authenticated, check if they have a profile
-          const { hasProfile } = await checkUserProfile(user.id);
+          const { hasProfile, error } = await checkUserProfile(user.id);
+          
+          if (error) {
+            console.error('🔴 Index: Error checking profile:', JSON.stringify(error, null, 2));
+          }
+          
+          console.log('🔵 Index: Profile check result - hasProfile:', hasProfile);
           
           if (hasProfile) {
             // User has profile, go to main app
+            console.log('🟢 Index: User has profile, navigating to main app');
             router.replace('/(tabs)');
           } else {
             // User needs to set up profile
+            console.log('🟡 Index: User needs profile setup, navigating to setup');
             router.replace('/setup-profile');
           }
         } else {
           // User is not authenticated, go to login
+          console.log('🔵 Index: No user, navigating to login');
           router.replace('/login');
         }
       }

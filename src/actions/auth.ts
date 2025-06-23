@@ -17,9 +17,12 @@ export interface UserProfileData {
 // Sign in with Google OAuth
 export async function signInWithGoogle() {
   try {
+    console.log('🔵 Starting Google OAuth flow...');
+    
     const redirectUrl = AuthSession.makeRedirectUri({
       useProxy: true,
-    })
+    });
+    console.log('🔵 Redirect URL:', redirectUrl);
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -30,40 +33,114 @@ export async function signInWithGoogle() {
           prompt: 'consent',
         },
       },
-    })
+    });
 
-    if (error) throw error
+    if (error) {
+      console.error('🔴 Supabase OAuth error:', JSON.stringify(error, null, 2));
+      throw error;
+    }
+
+    console.log('🔵 OAuth data received:', JSON.stringify(data, null, 2));
 
     // Open the OAuth URL
     if (data.url) {
+      console.log('🔵 Opening OAuth URL:', data.url);
+      
       const result = await WebBrowser.openAuthSessionAsync(
         data.url,
         redirectUrl
-      )
+      );
+
+      console.log('🔵 WebBrowser result:', JSON.stringify(result, null, 2));
 
       if (result.type === 'success') {
+        console.log('🟢 OAuth redirect successful');
+        
         // Handle the redirect URL
-        const { url } = result
-        const parsedUrl = new URL(url)
-        const accessToken = parsedUrl.searchParams.get('access_token')
-        const refreshToken = parsedUrl.searchParams.get('refresh_token')
+        const { url } = result;
+        console.log('🔵 Redirect URL received:', url);
+        
+        const parsedUrl = new URL(url);
+        console.log('🔵 Parsed URL pathname:', parsedUrl.pathname);
+        console.log('🔵 Parsed URL search params:', parsedUrl.search);
+        console.log('🔵 Parsed URL fragment:', parsedUrl.hash);
+        
+        // Parse the fragment (after #) instead of search params
+        let accessToken: string | null = null;
+        let refreshToken: string | null = null;
+        let error: string | null = null;
+        let errorDescription: string | null = null;
+
+        if (parsedUrl.hash) {
+          // Remove the # and parse as URLSearchParams
+          const fragmentParams = new URLSearchParams(parsedUrl.hash.substring(1));
+          accessToken = fragmentParams.get('access_token');
+          refreshToken = fragmentParams.get('refresh_token');
+          error = fragmentParams.get('error');
+          errorDescription = fragmentParams.get('error_description');
+          
+          console.log('🔵 Fragment params found:', Array.from(fragmentParams.entries()));
+        } else {
+          // Fallback to search params if no fragment
+          accessToken = parsedUrl.searchParams.get('access_token');
+          refreshToken = parsedUrl.searchParams.get('refresh_token');
+          error = parsedUrl.searchParams.get('error');
+          errorDescription = parsedUrl.searchParams.get('error_description');
+          
+          console.log('🔵 Search params found:', Array.from(parsedUrl.searchParams.entries()));
+        }
+
+        console.log('🔵 Access token present:', !!accessToken);
+        console.log('🔵 Refresh token present:', !!refreshToken);
+        console.log('🔵 Error in URL:', error);
+        console.log('🔵 Error description:', errorDescription);
+
+        if (error) {
+          console.error('🔴 OAuth error in redirect URL:', error, errorDescription);
+          throw new Error(`OAuth error: ${error} - ${errorDescription}`);
+        }
 
         if (accessToken && refreshToken) {
+          console.log('🟢 Tokens found, setting session...');
+          
           // Set the session with the tokens
           const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken,
-          })
+          });
 
-          if (sessionError) throw sessionError
-          return { data: sessionData, error: null }
+          if (sessionError) {
+            console.error('🔴 Session error:', JSON.stringify(sessionError, null, 2));
+            throw sessionError;
+          }
+
+          console.log('🟢 Session set successfully');
+          console.log('🔵 Session user:', sessionData.user?.email);
+          
+          return { data: sessionData, error: null };
+        } else {
+          console.error('🔴 Missing tokens in redirect URL');
+          console.log('🔵 Fragment params:', parsedUrl.hash ? Array.from(new URLSearchParams(parsedUrl.hash.substring(1)).entries()) : 'No fragment');
+          console.log('🔵 Search params:', Array.from(parsedUrl.searchParams.entries()));
+          throw new Error('Missing access_token or refresh_token in redirect URL');
         }
+      } else if (result.type === 'cancel') {
+        console.log('🟡 User cancelled OAuth flow');
+        throw new Error('User cancelled the authentication');
+      } else if (result.type === 'dismiss') {
+        console.log('🟡 OAuth flow was dismissed');
+        throw new Error('Authentication was dismissed');
+      } else {
+        console.error('🔴 Unexpected WebBrowser result type:', result.type);
+        throw new Error(`Unexpected result type: ${result.type}`);
       }
+    } else {
+      console.error('🔴 No OAuth URL received from Supabase');
+      throw new Error('No OAuth URL received from Supabase');
     }
-
-    return { data: null, error: new Error('OAuth flow was cancelled or failed') }
   } catch (error) {
-    return { data: null, error }
+    console.error('🔴 Full OAuth error:', JSON.stringify(error, null, 2));
+    return { data: null, error };
   }
 }
 

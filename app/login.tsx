@@ -9,18 +9,28 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   const handleGoogleLogin = async () => {
+    console.log('🔵 Login: Starting Google login process...');
     setLoading(true);
+    
     try {
       const { data, error } = await signInWithGoogle();
 
       if (error) {
+        console.error('🔴 Login: Google login error:', JSON.stringify(error, null, 2));
         Alert.alert('Login Failed', error.message || 'An error occurred during Google login');
       } else if (data?.user) {
-        console.log('Google login successful');
+        console.log('🟢 Login: Google login successful for user:', data.user.email);
+        console.log('🔵 Login: User will be redirected to profile setup or main app based on profile status');
+        // Navigation will be handled by the index.tsx useEffect
+      } else {
+        console.log('🟡 Login: No error but no user data received');
+        Alert.alert('Login Failed', 'No user data received');
       }
     } catch (error) {
+      console.error('🔴 Login: Unexpected error:', JSON.stringify(error, null, 2));
       Alert.alert('Login Failed', 'An unexpected error occurred');
     } finally {
+      console.log('🔵 Login: Finished Google login process');
       setLoading(false);
     }
   };
@@ -49,6 +59,11 @@ export default function LoginPage() {
           icon={<Ionicons name="logo-google" size={20} color="#4285F4" />}
           style={styles.googleButton}
         />
+
+        {/* Info Text */}
+        <Text style={styles.infoText}>
+          After signing in, you'll set up your profile with your name and university
+        </Text>
       </View>
     </SafeAreaView>
   );
@@ -94,6 +109,12 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   googleButton: {
+    marginTop: 24,
+  },
+  infoText: {
+    fontSize: 16,
+    color: '#6b7280',
+    textAlign: 'center',
     marginTop: 24,
   },
 }); 
