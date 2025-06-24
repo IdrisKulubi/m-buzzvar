@@ -50,7 +50,7 @@ export const Colors = {
     background: deepBlack, // Deep black background
     tint: primaryGold, // Gold accent
     icon: primaryGold, // Gold icons for visibility
-    tabIconDefault: '#9CA3AF', // Light gray for inactive tabs
+    tabIconDefault: '#9CA3AF', 
     tabIconSelected: primaryGold,
     // Additional colors for premium dark look
     surface: darkGray, // Dark surface with good contrast

@@ -10,7 +10,6 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Image } from 'expo-image'
-import { Ionicons } from '@expo/vector-icons'
 import { Colors } from '@/constants/Colors'
 import { useAuth } from '@/src/lib/hooks'
 import { getUserProfile } from '@/src/actions/auth'
@@ -57,6 +56,8 @@ export default function HomeScreen() {
     await loadProfile()
     setRefreshing(false)
   }
+
+  
 
   const handleSignOut = async () => {
     Alert.alert(
