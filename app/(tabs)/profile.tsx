@@ -293,7 +293,7 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-forward" size={20} color={colors.muted} />
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.menuItem, styles.menuItemLast]}>
+          <TouchableOpacity style={[styles.menuItem, styles.menuItemLast]} onPress={() => router.push('/privacy')}>
             <View style={styles.menuItemContent}>
               <View style={[styles.menuIcon, { backgroundColor: Colors.semantic.info }]}>
                 <Ionicons name="lock-closed-outline" size={20} color={'#FFF'} />
@@ -332,7 +332,7 @@ export default function ProfileScreen() {
         {/* Menu Section: Support */}
         <View style={styles.menuSection}>
           <Text style={styles.menuSectionTitle}>Support</Text>
-          <TouchableOpacity style={styles.menuItem}>
+          <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/help')}>
             <View style={styles.menuItemContent}>
               <View style={[styles.menuIcon, { backgroundColor: Colors.semantic.success }]}>
                 <Ionicons name="help-circle-outline" size={20} color={'#FFF'} />
@@ -344,7 +344,7 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-forward" size={20} color={colors.muted} />
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.menuItem, styles.menuItemLast]}>
+          <TouchableOpacity style={[styles.menuItem, styles.menuItemLast]} onPress={() => router.push('/about')}>
             <View style={styles.menuItemContent}>
               <View style={[styles.menuIcon, { backgroundColor: '#6B7280' }]}>
                 <Ionicons name="information-circle-outline" size={20} color={'#FFF'} />
