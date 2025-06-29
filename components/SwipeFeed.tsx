@@ -1,32 +1,36 @@
 import { supabase } from '@/src/lib/supabase';
-import React, { useEffect, useRef, useState } from 'react';
-import { 
-  View, 
-  Text, 
-  Image, 
-  StyleSheet, 
-  Dimensions, 
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
   FlatList,
-  Animated,
   TouchableOpacity,
-  ActivityIndicator
+  ActivityIndicator,
+  useColorScheme,
+  Image,
 } from 'react-native';
-import { AntDesign, FontAwesome, Ionicons, Feather } from '@expo/vector-icons';
-
-const { width, height } = Dimensions.get('window');
+import { Ionicons, Feather } from '@expo/vector-icons';
+import { Colors } from '@/constants/Colors';
 
 const SwipeFeed: React.FC = () => {
+  const colorScheme = useColorScheme() ?? 'dark';
+  const colors = Colors[colorScheme];
   const [venues, setVenues] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const scrollY = useRef(new Animated.Value(0)).current;
+
+  const styles = useMemo(() => getStyles(colors), [colors]);
 
   useEffect(() => {
     const fetchVenues = async () => {
       const { data, error } = await supabase
         .from('venues')
-        .select('*')
-        .limit(20); // Limit for performance
+        .select(`
+          *,
+          menus(*),
+          promotions(*)
+        `)
+        .limit(20);
 
       if (error) {
         console.error('Error fetching venues:', error);
@@ -39,225 +43,189 @@ const SwipeFeed: React.FC = () => {
     fetchVenues();
   }, []);
 
-  const handleScroll = Animated.event(
-    [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-    { useNativeDriver: true }
-  );
-
-  const renderActionButton = (icon: React.ReactNode, text: string) => (
-    <TouchableOpacity style={styles.actionButton}>
-      <View style={styles.actionIcon}>{icon}</View>
-      <Text style={styles.actionText}>{text}</Text>
-    </TouchableOpacity>
-  );
-
-  const renderItem = ({ item, index }: { item: any; index: number }) => {
-    const inputRange = [
-      (index - 1) * height,
-      index * height,
-      (index + 1) * height,
-    ];
-
-    const scale = scrollY.interpolate({
-      inputRange,
-      outputRange: [0.8, 1, 0.8],
-      extrapolate: 'clamp',
-    });
-
-    return (
-      <Animated.View style={[styles.card, { transform: [{ scale }] }]}>
-        <Image 
-          source={{ uri: item.cover_image_url || 'https://placehold.co/400' }} 
-          style={styles.image} 
-        />
-        
-        {/* Gradient Overlay */}
-        <View style={styles.gradientOverlay} />
-        
-        {/* Venue Info */}
-        <View style={styles.infoContainer}>
-          <Text style={styles.title}>{item.name}</Text>
-          <Text style={styles.description}>{item.description}</Text>
-          
-          <View style={styles.detailsRow}>
-            <Ionicons name="location-sharp" size={16} color="white" />
-            <Text style={styles.address} numberOfLines={1}>{item.address}</Text>
-          </View>
-          
-          {/* Updated Time Display */}
-          <View style={styles.timeContainer}>
-            <Feather name="clock" size={16} color="white" />
-            <Text style={styles.timeText}>
-              {formatHours(item.hours) || 'Open 24/7'}
-            </Text>
-          </View>
-        </View>
-        
-        {/* Right Action Buttons */}
-        <View style={styles.actionContainer}>
-          {renderActionButton(
-            <AntDesign name="heart" size={32} color="white" />,
-            '24.5K'
-          )}
-          {renderActionButton(
-            <FontAwesome name="commenting" size={32} color="white" />,
-            '1.2K'
-          )}
-          {renderActionButton(
-            <FontAwesome name="bookmark" size={32} color="white" />,
-            'Save'
-          )}
-          {renderActionButton(
-            <Feather name="share" size={32} color="white" />,
-            'Share'
-          )}
-        </View>
-      </Animated.View>
-    );
-  };
-
-  // Helper function to format hours
   const formatHours = (hours: string | null) => {
-    if (!hours) return null;
+    if (!hours) return 'Hours not available';
 
     try {
       const hoursObj = JSON.parse(hours);
-      const today = new Date().toLocaleString('en-US', { weekday: 'long' }).toLowerCase();
+      const today = new Date().toLocaleString('en-us', { weekday: 'long' }).toLowerCase();
       const todayHours = hoursObj[today];
 
-      if (todayHours === 'closed') {
-        return 'Closed Today';
-      }
-
-      if (todayHours) {
-        return `Open Today: ${todayHours}`;
-      }
-
-      return 'Open 24/7';
-    } catch (error) {
-      console.error('Error parsing hours:', error);
-      return 'Open 24/7';
+      if (todayHours === 'closed') return 'Closed Today';
+      if (todayHours) return `Open: ${todayHours}`;
+      
+      return 'Hours not specified';
+    } catch (e) {
+      return hours;
     }
   };
 
+  const renderItem = ({ item }: { item: any }) => (
+    <View style={styles.card}>
+      <Image
+        source={{ uri: item.cover_image_url || 'https://placehold.co/600x400' }}
+        style={styles.cardImage}
+      />
+      
+      {item.promotions.length > 0 && (
+        <View style={styles.promotionBadge}>
+          <Ionicons name="star" size={14} color={colors.background} />
+          <Text style={styles.promotionText}>{item.promotions[0].title}</Text>
+        </View>
+      )}
+
+      <View style={styles.cardContent}>
+        <Text style={styles.cardTitle}>{item.name}</Text>
+        <Text style={styles.cardDescription} numberOfLines={2}>
+          {item.description}
+        </Text>
+
+        <View style={styles.detailsRow}>
+          <Ionicons name="location-outline" size={16} color={colors.muted} />
+          <Text style={styles.detailsText} numberOfLines={1}>{item.address}</Text>
+        </View>
+
+        <View style={styles.detailsRow}>
+          <Feather name="clock" size={16} color={colors.muted} />
+          <Text style={styles.detailsText}>
+            {formatHours(item.hours)}
+          </Text>
+        </View>
+      </View>
+      
+      <View style={styles.cardActions}>
+        <TouchableOpacity style={styles.actionButton}>
+          <Ionicons name="heart-outline" size={22} color={colors.text} />
+          <Text style={styles.actionText}>Like</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.actionButton}>
+          <Ionicons name="bookmark-outline" size={22} color={colors.text} />
+          <Text style={styles.actionText}>Save</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.actionButton}>
+          <Ionicons name="arrow-forward" size={22} color={colors.text} />
+          <Text style={styles.actionText}>Details</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+  
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#FF3250" />
+        <ActivityIndicator size="large" color={colors.tint} />
+        <Text style={styles.loadingText}>Finding venues...</Text>
       </View>
     );
   }
 
   return (
-    <Animated.FlatList
+    <FlatList
       data={venues}
       keyExtractor={(item) => item.id}
       renderItem={renderItem}
+      contentContainerStyle={styles.listContainer}
       showsVerticalScrollIndicator={false}
-      snapToInterval={height}
-      decelerationRate="fast"
-      onScroll={handleScroll}
-      scrollEventThrottle={16}
-      onMomentumScrollEnd={(e) => {
-        const index = Math.floor(e.nativeEvent.contentOffset.y / height);
-        setCurrentIndex(index);
-      }}
     />
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (colors: typeof Colors.dark) => StyleSheet.create({
+  listContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 100,
+  },
   card: {
-    width,
-    height,
-    justifyContent: 'flex-end',
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  image: {
-    ...StyleSheet.absoluteFillObject,
+  cardImage: {
     width: '100%',
-    height: '100%',
+    height: 200,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    backgroundColor: colors.border,
   },
-  gradientOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundImage: 'linear-gradient(to top, rgba(0,0,0,0.8) 20%, transparent 100%)',
+  promotionBadge: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    backgroundColor: colors.tint,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 20,
+    gap: 6,
   },
-  infoContainer: {
-    padding: 20,
-    marginBottom: 60,
-  },
-  title: {
-    fontSize: 28,
+  promotionText: {
+    color: colors.background,
+    fontSize: 12,
     fontWeight: 'bold',
-    color: 'white',
-    textShadowColor: 'rgba(0,0,0,0.8)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
+  },
+  cardContent: {
+    padding: 16,
+  },
+  cardTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: colors.text,
     marginBottom: 8,
   },
-  description: {
-    fontSize: 16,
-    color: 'white',
-    marginBottom: 15,
-    textShadowColor: 'rgba(0,0,0,0.8)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+  cardDescription: {
+    fontSize: 14,
+    color: colors.muted,
+    marginBottom: 16,
+    lineHeight: 20,
   },
   detailsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
   },
-  address: {
+  detailsText: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.9)',
-    marginLeft: 8,
+    color: colors.text,
+    marginLeft: 10,
     flexShrink: 1,
   },
-  timeContainer: {
+  cardActions: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-  },
-  timeText: {
-    fontSize: 14,
-    color: 'white',
-    marginLeft: 8,
-    fontWeight: '500',
-  },
-  actionContainer: {
-    position: 'absolute',
-    right: 16,
-    bottom: 160,
-    alignItems: 'center',
+    justifyContent: 'space-around',
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingVertical: 8,
   },
   actionButton: {
-    marginBottom: 25,
+    flexDirection: 'row',
     alignItems: 'center',
-  },
-  actionIcon: {
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    borderRadius: 25,
-    padding: 10,
-    marginBottom: 4,
+    padding: 8,
+    gap: 8,
   },
   actionText: {
-    color: 'white',
-    fontSize: 12,
+    color: colors.text,
+    fontSize: 14,
     fontWeight: '500',
-    textShadowColor: 'rgba(0,0,0,0.8)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'black',
+    backgroundColor: colors.background,
+  },
+  loadingText: {
+    color: colors.text,
+    marginTop: 10,
   },
 });
 
-export default SwipeFeed;
+export default SwipeFeed; 
