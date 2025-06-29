@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import {
   View,
   Text,
@@ -17,7 +17,7 @@ import { useAuth } from '@/src/lib/hooks'
 import { getUserProfile } from '@/src/actions/auth'
 import { getVenues, getUserBookmarks, VenueWithDistance } from '@/src/actions/clubs'
 import { Ionicons } from '@expo/vector-icons'
-import { router } from 'expo-router'
+import { router, useFocusEffect } from 'expo-router'
 
 interface UserProfile {
   id: string
@@ -45,7 +45,7 @@ export default function HomeScreen() {
   const [featuredVenues, setFeaturedVenues] = useState<VenueWithDistance[]>([])
   const [bookmarkedVenues, setBookmarkedVenues] = useState<VenueWithDistance[]>([])
   
-  const loadDashboardData = async () => {
+  const loadDashboardData = useCallback(async () => {
     if (!user) {
       setLoading(false)
       return
@@ -82,7 +82,7 @@ export default function HomeScreen() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user]);
 
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -90,9 +90,11 @@ export default function HomeScreen() {
     setRefreshing(false)
   }
 
-  useEffect(() => {
-    loadDashboardData()
-  }, [user,])
+  useFocusEffect(
+    useCallback(() => {
+      loadDashboardData();
+    }, [loadDashboardData])
+  );
 
   const styles = StyleSheet.create({
     container: {
@@ -271,7 +273,7 @@ export default function HomeScreen() {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.tint} />
         }
       >
         {/* Header */}

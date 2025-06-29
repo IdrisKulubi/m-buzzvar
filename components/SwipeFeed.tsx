@@ -1,5 +1,5 @@
 import { supabase } from '@/src/lib/supabase';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,36 +12,98 @@ import {
 } from 'react-native';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
+import { useAuth } from '@/src/lib/hooks';
+import { useToast } from '@/src/lib/ToastProvider';
+import { toggleBookmark, recordClubView } from '@/src/actions/clubs';
 
 const SwipeFeed: React.FC = () => {
   const colorScheme = useColorScheme() ?? 'dark';
   const colors = Colors[colorScheme];
+  const { user } = useAuth();
+  const { showToast } = useToast();
+
   const [venues, setVenues] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const styles = useMemo(() => getStyles(colors), [colors]);
 
-  useEffect(() => {
-    const fetchVenues = async () => {
-      const { data, error } = await supabase
-        .from('venues')
-        .select(`
-          *,
-          menus(*),
-          promotions(*)
-        `)
-        .limit(20);
-
-      if (error) {
-        console.error('Error fetching venues:', error);
-      } else {
-        setVenues(data);
+  const fetchVenues = useCallback(async () => {
+    setLoading(true);
+    let bookmarkedIds = new Set();
+    
+    if (user) {
+      const { data: bookmarksData } = await supabase
+        .from('user_bookmarks')
+        .select('venue_id')
+        .eq('user_id', user.id);
+      if (bookmarksData) {
+        bookmarkedIds = new Set(bookmarksData.map(b => b.venue_id));
       }
-      setLoading(false);
-    };
+    }
 
+    const { data, error } = await supabase
+      .from('venues')
+      .select('*, menus(*), promotions(*)')
+      .limit(20);
+
+    if (error) {
+      console.error('Error fetching venues:', error);
+      showToast({ type: 'error', message: "Couldn't fetch venues" });
+    } else {
+      const processedVenues = data.map(v => ({
+        ...v,
+        isBookmarked: bookmarkedIds.has(v.id),
+        isLiked: false, // Placeholder for like state
+      }));
+      setVenues(processedVenues);
+    }
+    setLoading(false);
+  }, [user]);
+
+  useEffect(() => {
     fetchVenues();
-  }, []);
+  }, [user]);
+
+  const handleInteraction = useCallback((venueId: string, action: 'like' | 'save') => {
+    if (!user) {
+      showToast({ type: 'error', message: 'You need to be logged in to do that!' });
+      return;
+    }
+
+    const originalVenues = [...venues];
+    let optimisticState, endpointCall, successMessage;
+
+    if (action === 'save') {
+      const venue = venues.find(v => v.id === venueId);
+      const isCurrentlyBookmarked = venue?.isBookmarked;
+
+      optimisticState = { isBookmarked: !isCurrentlyBookmarked };
+      endpointCall = () => toggleBookmark(venueId, user.id);
+      successMessage = isCurrentlyBookmarked ? "Removed from your faves" : "Saved to your faves ✨";
+    } else { // like
+      optimisticState = { isLiked: true };
+      endpointCall = () => recordClubView(venueId, user.id, 'like');
+      successMessage = "You liked this spot! 🔥";
+    }
+
+    // Optimistic UI update
+    setVenues(current =>
+      current.map(v => (v.id === venueId ? { ...v, ...optimisticState } : v))
+    );
+    
+    endpointCall().then(({ error }) => {
+      if (error) {
+        setVenues(originalVenues); // Revert on error
+        showToast({ type: 'error', message: "Couldn't save that. Try again." });
+      } else {
+        showToast({ type: 'success', message: successMessage });
+      }
+    });
+  }, [user, venues, showToast]);
+
+  const handleRefresh = useCallback(async () => {
+    await fetchVenues();
+  }, [fetchVenues]);
 
   const formatHours = (hours: string | null) => {
     if (!hours) return 'Hours not available';
@@ -94,13 +156,21 @@ const SwipeFeed: React.FC = () => {
       </View>
       
       <View style={styles.cardActions}>
-        <TouchableOpacity style={styles.actionButton}>
-          <Ionicons name="heart-outline" size={22} color={colors.text} />
-          <Text style={styles.actionText}>Like</Text>
+        <TouchableOpacity style={styles.actionButton} onPress={() => handleInteraction(item.id, 'like')}>
+          <Ionicons 
+            name={item.isLiked ? "heart" : "heart-outline"} 
+            size={22} 
+            color={item.isLiked ? colors.destructive : colors.text} 
+          />
+          <Text style={[styles.actionText, item.isLiked && { color: colors.destructive }]}>Like</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.actionButton}>
-          <Ionicons name="bookmark-outline" size={22} color={colors.text} />
-          <Text style={styles.actionText}>Save</Text>
+        <TouchableOpacity style={styles.actionButton} onPress={() => handleInteraction(item.id, 'save')}>
+          <Ionicons 
+            name={item.isBookmarked ? "bookmark" : "bookmark-outline"} 
+            size={22} 
+            color={item.isBookmarked ? colors.tint : colors.text} 
+          />
+          <Text style={[styles.actionText, item.isBookmarked && { color: colors.tint }]}>Save</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionButton}>
           <Ionicons name="arrow-forward" size={22} color={colors.text} />
@@ -126,6 +196,8 @@ const SwipeFeed: React.FC = () => {
       renderItem={renderItem}
       contentContainerStyle={styles.listContainer}
       showsVerticalScrollIndicator={false}
+      onRefresh={handleRefresh}
+      refreshing={loading}
     />
   );
 };
@@ -228,4 +300,4 @@ const getStyles = (colors: typeof Colors.dark) => StyleSheet.create({
   },
 });
 
-export default SwipeFeed; 
+export default SwipeFeed;
