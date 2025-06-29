@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import {
   View,
   Text,
@@ -18,6 +18,9 @@ import { getUserProfile } from '@/src/actions/auth'
 import { getVenues, getUserBookmarks, VenueWithDistance } from '@/src/actions/clubs'
 import { Ionicons } from '@expo/vector-icons'
 import { router, useFocusEffect } from 'expo-router'
+import { supabase } from '@/src/lib/supabase'
+import { BottomSheetModal } from '@gorhom/bottom-sheet'
+import VenueDetailsSheet from '@/components/VenueDetailsSheet'
 
 interface UserProfile {
   id: string
@@ -45,6 +48,16 @@ export default function HomeScreen() {
   const [featuredVenues, setFeaturedVenues] = useState<VenueWithDistance[]>([])
   const [bookmarkedVenues, setBookmarkedVenues] = useState<VenueWithDistance[]>([])
   
+  // Bottom Sheet state
+  const [selectedVenue, setSelectedVenue] = useState<any | null>(null)
+  const bottomSheetModalRef = useRef<BottomSheetModal>(null)
+  const snapPoints = useMemo(() => ['75%', '90%'], [])
+
+  const handlePresentDetails = useCallback((venue: any) => {
+    setSelectedVenue(venue)
+    bottomSheetModalRef.current?.present()
+  }, [])
+  
   const loadDashboardData = useCallback(async () => {
     if (!user) {
       setLoading(false)
@@ -52,29 +65,39 @@ export default function HomeScreen() {
     }
 
     try {
-      // Fetch all data in parallel for speed
-      const [
-        profileResult,
-        venuesResult,
-        bookmarksResult,
-      ] = await Promise.all([
+      const [profileResult, venuesResult, bookmarksResult] = await Promise.all([
         getUserProfile(user.id),
-        getVenues(), // For now, just get general venues
-        getUserBookmarks(user.id),
+        // Fetch venues with promotions for the featured section
+        supabase
+          .from('venues')
+          .select('*, promotions(*)')
+          .order('created_at', { ascending: false })
+          .limit(10),
+        // Fetch bookmarked venues with their details and promotions
+        supabase
+          .from('user_bookmarks')
+          .select('venues(*, promotions(*))')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false }),
       ])
 
       if (profileResult.error) console.error('Error loading profile:', profileResult.error)
       else setProfile(profileResult.data)
       
-      if (venuesResult.error) console.error('Error fetching venues:', venuesResult.error)
-      else {
-        // Feature venues with promotions or just the first few
-        const featured = venuesResult.data?.filter(v => v.promotions && v.promotions.length > 0) || []
-        setFeaturedVenues(featured.length > 0 ? featured : venuesResult.data?.slice(0, 5) || [])
+      if (venuesResult.error) {
+        console.error('Error fetching venues:', venuesResult.error)
+      } else {
+        const allVenues = venuesResult.data as VenueWithDistance[]
+        const featured = allVenues.filter(v => v.promotions && v.promotions.length > 0)
+        setFeaturedVenues(featured.length > 0 ? featured : allVenues.slice(0, 5))
       }
       
-      if (bookmarksResult.error) console.error('Error fetching bookmarks:', bookmarksResult.error)
-      else setBookmarkedVenues(bookmarksResult.data || [])
+      if (bookmarksResult.error) {
+        console.error('Error fetching bookmarks:', bookmarksResult.error)
+      } else {
+        const bookmarks = bookmarksResult.data?.map((b: any) => b.venues) || []
+        setBookmarkedVenues(bookmarks)
+      }
 
     } catch (error) {
       console.error('Error loading dashboard data:', error)
@@ -82,7 +105,7 @@ export default function HomeScreen() {
     } finally {
       setLoading(false)
     }
-  }, [user]);
+  }, [user])
 
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -92,9 +115,9 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      loadDashboardData();
+      loadDashboardData()
     }, [loadDashboardData])
-  );
+  )
 
   const styles = StyleSheet.create({
     container: {
@@ -299,7 +322,7 @@ export default function HomeScreen() {
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalList}>
             {featuredVenues.map((venue) => (
-              <TouchableOpacity key={venue.id} style={styles.featuredCard}>
+              <TouchableOpacity key={venue.id} style={styles.featuredCard} onPress={() => handlePresentDetails(venue)}>
                 <Image source={{ uri: venue.cover_image_url || 'https://placehold.co/600x400' }} style={styles.featuredImage} />
                 {venue.promotions && venue.promotions.length > 0 && (
                   <View style={styles.promotionBadge}>
@@ -349,7 +372,7 @@ export default function HomeScreen() {
           {bookmarkedVenues.length > 0 ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalList}>
               {bookmarkedVenues.map((venue) => (
-                <TouchableOpacity key={venue.id} style={styles.bookmarkCard}>
+                <TouchableOpacity key={venue.id} style={styles.bookmarkCard} onPress={() => handlePresentDetails(venue)}>
                   <Image source={{ uri: venue.cover_image_url || 'https://placehold.co/400x400' }} style={styles.bookmarkImage} />
                   <Text style={styles.bookmarkTitle} numberOfLines={1}>{venue.name}</Text>
                 </TouchableOpacity>
@@ -365,6 +388,20 @@ export default function HomeScreen() {
           )}
         </View>
       </ScrollView>
+
+      <BottomSheetModal
+        ref={bottomSheetModalRef}
+        index={0}
+        snapPoints={snapPoints}
+        backgroundStyle={{ 
+          backgroundColor: colors.surface,
+          borderTopLeftRadius: 24,
+          borderTopRightRadius: 24,
+        }}
+        handleIndicatorStyle={{ backgroundColor: colors.muted }}
+      >
+        {selectedVenue && <VenueDetailsSheet venue={selectedVenue} />}
+      </BottomSheetModal>
     </SafeAreaView>
   )
 } 

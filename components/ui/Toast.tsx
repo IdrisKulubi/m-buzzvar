@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, useColorScheme, Animated, Easing, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, useColorScheme, Animated, Easing, TouchableOpacity, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -25,11 +25,11 @@ const Toast: React.FC<ToastProps> = ({
 }) => {
   const colorScheme = useColorScheme() ?? 'dark';
   const colors = Colors[colorScheme];
-  const slideAnim = useRef(new Animated.Value(-100)).current;
+  const slideAnim = useRef(new Animated.Value(-200)).current;
 
   const hideToast = useCallback(() => {
     Animated.timing(slideAnim, {
-      toValue: -150,
+      toValue: -200,
       duration: 300,
       easing: Easing.in(Easing.ease),
       useNativeDriver: true,
@@ -46,7 +46,7 @@ const Toast: React.FC<ToastProps> = ({
 
     // Animate in
     Animated.timing(slideAnim, {
-      toValue: 0,
+      toValue: Platform.OS === 'ios' ? 0 : 16,
       duration: 400,
       easing: Easing.out(Easing.ease),
       useNativeDriver: true,
@@ -64,14 +64,17 @@ const Toast: React.FC<ToastProps> = ({
     success: {
       backgroundColor: '#28a745',
       shadowColor: '#28a745',
+      borderColor: 'rgba(255, 255, 255, 0.2)',
     },
     error: {
       backgroundColor: colors.destructive,
       shadowColor: colors.destructive,
+      borderColor: 'rgba(255, 255, 255, 0.1)',
     },
     info: {
       backgroundColor: colors.tint,
       shadowColor: colors.tint,
+      borderColor: colorScheme === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
     },
   };
 
@@ -84,36 +87,48 @@ const Toast: React.FC<ToastProps> = ({
   const toastIcon = icon || IconMap[type];
 
   return (
-    <Animated.View style={[styles.container, { transform: [{ translateY: slideAnim }] }]}>
-      <TouchableOpacity onPress={hideToast} style={{ flex: 1 }}>
-        <SafeAreaView style={[styles.toast, toastStyle[type]]}>
+    <SafeAreaView 
+      style={styles.wrapper} 
+      pointerEvents="box-none" 
+      edges={['top', 'left', 'right']}
+    >
+      <Animated.View style={[styles.container, { transform: [{ translateY: slideAnim }] }]}>
+        <TouchableOpacity 
+          onPress={hideToast} 
+          style={[styles.toast, toastStyle[type]]}
+          activeOpacity={0.9}
+        >
           <Ionicons name={toastIcon} size={24} color="#FFF" style={styles.icon} />
           <Text style={styles.message}>{message}</Text>
-        </SafeAreaView>
-      </TouchableOpacity>
-    </Animated.View>
+        </TouchableOpacity>
+      </Animated.View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  wrapper: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     zIndex: 9999,
   },
+  container: {
+    paddingHorizontal: 16,
+    width: '100%',
+  },
   toast: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderRadius: 12,
-    marginHorizontal: 16,
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.3,
+    paddingVertical: 16,
+    borderRadius: 24, // Increased for a more modern, "fully curved" look
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 10,
+    borderWidth: 1,
   },
   icon: {
     marginRight: 12,
@@ -121,7 +136,7 @@ const styles = StyleSheet.create({
   message: {
     flex: 1,
     color: '#FFF',
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
   },
 });

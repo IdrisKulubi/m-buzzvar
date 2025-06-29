@@ -1,5 +1,5 @@
 import { supabase } from '@/src/lib/supabase';
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,8 @@ import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/src/lib/hooks';
 import { useToast } from '@/src/lib/ToastProvider';
 import { toggleBookmark, recordClubView } from '@/src/actions/clubs';
+import { BottomSheetModal, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import VenueDetailsSheet from './VenueDetailsSheet';
 
 const SwipeFeed: React.FC = () => {
   const colorScheme = useColorScheme() ?? 'dark';
@@ -24,6 +26,11 @@ const SwipeFeed: React.FC = () => {
 
   const [venues, setVenues] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedVenue, setSelectedVenue] = useState<any | null>(null);
+
+  // Bottom sheet ref and snap points
+  const bottomSheetModalRef = useRef<BottomSheetModal>(null);
+  const snapPoints = useMemo(() => ['75%', '90%'], []);
 
   const styles = useMemo(() => getStyles(colors), [colors]);
 
@@ -63,6 +70,11 @@ const SwipeFeed: React.FC = () => {
   useEffect(() => {
     fetchVenues();
   }, [user]);
+
+  const handlePresentDetails = useCallback((venue: any) => {
+    setSelectedVenue(venue);
+    bottomSheetModalRef.current?.present();
+  }, []);
 
   const handleInteraction = useCallback((venueId: string, action: 'like' | 'save') => {
     if (!user) {
@@ -172,7 +184,7 @@ const SwipeFeed: React.FC = () => {
           />
           <Text style={[styles.actionText, item.isBookmarked && { color: colors.tint }]}>Save</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.actionButton}>
+        <TouchableOpacity style={styles.actionButton} onPress={() => handlePresentDetails(item)}>
           <Ionicons name="arrow-forward" size={22} color={colors.text} />
           <Text style={styles.actionText}>Details</Text>
         </TouchableOpacity>
@@ -190,15 +202,33 @@ const SwipeFeed: React.FC = () => {
   }
 
   return (
-    <FlatList
-      data={venues}
-      keyExtractor={(item) => item.id}
-      renderItem={renderItem}
-      contentContainerStyle={styles.listContainer}
-      showsVerticalScrollIndicator={false}
-      onRefresh={handleRefresh}
-      refreshing={loading}
-    />
+    <>
+      <FlatList
+        data={venues}
+        keyExtractor={(item) => item.id}
+        renderItem={renderItem}
+        contentContainerStyle={styles.listContainer}
+        showsVerticalScrollIndicator={false}
+        onRefresh={handleRefresh}
+        refreshing={loading}
+      />
+      
+      <BottomSheetModal
+        ref={bottomSheetModalRef}
+        index={0}
+        snapPoints={snapPoints}
+        backgroundStyle={{ 
+          backgroundColor: colors.surface,
+          borderTopLeftRadius: 24,
+          borderTopRightRadius: 24,
+        }}
+        handleIndicatorStyle={{ backgroundColor: colors.muted }}
+      >
+        {selectedVenue && (
+          <VenueDetailsSheet venue={selectedVenue} />
+        )}
+      </BottomSheetModal>
+    </>
   );
 };
 
