@@ -226,4 +226,89 @@ $$ language 'plpgsql';
 
 CREATE TRIGGER add_creator_to_group_trigger
     AFTER INSERT ON public.party_groups
-    FOR EACH ROW EXECUTE FUNCTION add_creator_to_group(); 
+    FOR EACH ROW EXECUTE FUNCTION add_creator_to_group();
+
+-- Reviews Table
+CREATE TABLE public.reviews (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  venue_id UUID REFERENCES public.venues(id) ON DELETE CASCADE NOT NULL,
+  user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
+  rating SMALLINT NOT NULL CHECK (rating >= 1 AND rating <= 5),
+  comment TEXT,
+  created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+
+  UNIQUE (user_id, venue_id)
+);
+
+-- RLS Policies for Reviews
+ALTER TABLE public.reviews ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow public read access" ON public.reviews FOR SELECT USING (true);
+CREATE POLICY "Allow authenticated users to insert" ON public.reviews FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Allow users to update their own review" ON public.reviews FOR UPDATE USING (auth.uid() = user_id);
+
+-- View to get venues with their average rating and review count
+CREATE OR REPLACE VIEW public.venues_with_ratings AS
+SELECT
+  v.*,
+  COALESCE(AVG(r.rating), 0)::float AS average_rating,
+  COUNT(r.id) AS review_count
+FROM
+  public.venues v
+LEFT JOIN
+  public.reviews r ON v.id = r.venue_id
+GROUP BY
+  v.id;
+
+-- Function to get detailed review summary for a single venue
+CREATE OR REPLACE FUNCTION get_venue_review_details(p_venue_id UUID)
+RETURNS TABLE (
+  average_rating FLOAT,
+  review_count BIGINT,
+  rating_breakdown JSONB,
+  latest_reviews JSONB
+)
+AS $$
+BEGIN
+  RETURN QUERY
+  WITH venue_reviews AS (
+    SELECT * FROM public.reviews WHERE venue_id = p_venue_id
+  ),
+  review_stats AS (
+    SELECT
+      AVG(rating)::float AS avg_rating,
+      COUNT(id) AS total_reviews
+    FROM venue_reviews
+  ),
+  rating_counts AS (
+    SELECT
+      jsonb_object_agg(rating, count) as breakdown
+    FROM (
+      SELECT rating, COUNT(*) as count
+      FROM venue_reviews
+      GROUP BY rating
+    ) as counts
+  ),
+  recent_reviews AS (
+    SELECT
+      jsonb_agg(
+        jsonb_build_object(
+          'id', r.id,
+          'rating', r.rating,
+          'comment', r.comment,
+          'created_at', r.created_at,
+          'author_name', u.name
+        ) ORDER BY r.created_at DESC
+      ) as reviews
+    FROM (
+      SELECT * FROM venue_reviews ORDER BY created_at DESC LIMIT 3
+    ) as r
+    LEFT JOIN public.users u ON r.user_id = u.id
+  )
+  SELECT
+    COALESCE((SELECT avg_rating FROM review_stats), 0.0),
+    COALESCE((SELECT total_reviews FROM review_stats), 0),
+    COALESCE((SELECT breakdown FROM rating_counts), '{}'::jsonb),
+    COALESCE((SELECT reviews FROM recent_reviews), '[]'::jsonb)
+  FROM (SELECT 1) as dummy;
+END;
+$$ LANGUAGE plpgsql; 

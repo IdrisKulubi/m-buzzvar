@@ -108,140 +108,81 @@ export default function ProfileScreen() {
       flex: 1,
       backgroundColor: colors.background,
     },
-    content: {
-      flex: 1,
-      paddingHorizontal: 20,
-      paddingTop: 20,
+    scrollContent: {
+      paddingBottom: 40,
     },
-    header: {
-      alignItems: 'center',
-      marginBottom: 30,
-    },
-    title: {
-      fontSize: 32,
-      fontWeight: '700',
-      color: colors.text,
-      textAlign: 'center',
-      marginBottom: 8,
-      letterSpacing: -0.5,
-    },
-    subtitle: {
-      fontSize: 16,
-      color: colors.muted,
-      textAlign: 'center',
-    },
-    profileCard: {
-      backgroundColor: colors.surface,
-      borderRadius: 20,
+    // Hero Section Styles
+    heroSection: {
       padding: 24,
-      marginBottom: 20,
-      borderWidth: 1,
-      borderColor: colors.border,
       alignItems: 'center',
-    },
-    avatarContainer: {
-      marginBottom: 16,
+      backgroundColor: colors.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
     },
     avatar: {
-      width: 100,
-      height: 100,
-      borderRadius: 50,
-      borderWidth: 3,
+      width: 120,
+      height: 120,
+      borderRadius: 60,
+      borderWidth: 4,
       borderColor: colors.tint,
+      marginBottom: 16,
     },
     avatarPlaceholder: {
-      width: 100,
-      height: 100,
-      borderRadius: 50,
+      width: 120,
+      height: 120,
+      borderRadius: 60,
       backgroundColor: colors.tint,
       alignItems: 'center',
       justifyContent: 'center',
-      borderWidth: 3,
-      borderColor: colors.tint,
     },
     avatarText: {
-      fontSize: 36,
-      fontWeight: '700',
+      fontSize: 48,
+      fontWeight: 'bold',
       color: colors.background,
     },
     profileName: {
-      fontSize: 24,
-      fontWeight: '700',
+      fontSize: 26,
+      fontWeight: 'bold',
       color: colors.text,
       textAlign: 'center',
-      marginBottom: 4,
-    },
-    profileEmail: {
-      fontSize: 16,
-      color: colors.muted,
-      textAlign: 'center',
-      marginBottom: 8,
     },
     profileUniversity: {
       fontSize: 16,
       color: colors.tint,
       textAlign: 'center',
       fontWeight: '600',
+      marginTop: 4,
     },
     editButton: {
-      marginTop: 16,
-    },
-    settingsCard: {
-      backgroundColor: colors.surface,
+      position: 'absolute',
+      top: 20,
+      right: 20,
+      backgroundColor: 'rgba(0,0,0,0.3)',
       borderRadius: 20,
-      padding: 20,
-      marginBottom: 20,
+      padding: 8,
+    },
+    // Menu Section Styles
+    menuSection: {
+      marginTop: 32,
+      marginHorizontal: 16,
+      backgroundColor: colors.surface,
+      borderRadius: 16,
       borderWidth: 1,
       borderColor: colors.border,
+      overflow: 'hidden',
     },
-    settingsTitle: {
-      fontSize: 20,
-      fontWeight: '700',
+    menuSectionTitle: {
+      fontSize: 18,
+      fontWeight: 'bold',
       color: colors.text,
-      marginBottom: 16,
-    },
-    settingItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingVertical: 12,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-    },
-    settingItemLast: {
-      borderBottomWidth: 0,
-    },
-    settingLeft: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      flex: 1,
-    },
-    settingIcon: {
-      marginRight: 12,
-    },
-    settingText: {
-      fontSize: 16,
-      color: colors.text,
-      fontWeight: '500',
-    },
-    menuCard: {
-      backgroundColor: colors.surface,
-      borderRadius: 20,
-      padding: 20,
-      marginBottom: 20,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    menuTitle: {
-      fontSize: 20,
-      fontWeight: '700',
-      color: colors.text,
-      marginBottom: 16,
+      paddingHorizontal: 20,
+      paddingTop: 20,
+      paddingBottom: 10,
     },
     menuItem: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'space-between',
+      paddingHorizontal: 20,
       paddingVertical: 16,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
@@ -249,34 +190,49 @@ export default function ProfileScreen() {
     menuItemLast: {
       borderBottomWidth: 0,
     },
-    menuLeft: {
+    menuItemContent: {
       flexDirection: 'row',
       alignItems: 'center',
       flex: 1,
     },
     menuIcon: {
-      marginRight: 12,
+      width: 32,
+      height: 32,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 16,
+    },
+    menuTextContainer: {
+      flex: 1,
     },
     menuText: {
       fontSize: 16,
       color: colors.text,
-      fontWeight: '500',
+      fontWeight: '600',
+    },
+    menuSubText: {
+      fontSize: 12,
+      color: colors.muted,
+      marginTop: 2,
     },
     signOutButton: {
-      marginTop: 20,
-      marginBottom: 40,
+      marginHorizontal: 1,
+      marginTop: 32,
+      marginBottom: 16,
     },
     loadingContainer: {
       flex: 1,
       justifyContent: 'center',
       alignItems: 'center',
+      backgroundColor: colors.background,
     },
     loadingText: {
       fontSize: 16,
-      color: colors.muted,
+      color: colors.text,
     },
   });
-
+ 
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -289,15 +245,10 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Profile</Text>
-          <Text style={styles.subtitle}>Manage your account and preferences</Text>
-        </View>
-
-        {/* Profile Card */}
-        <View style={styles.profileCard}>
-          <View style={styles.avatarContainer}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Profile Hero Section */}
+        <View style={styles.heroSection}>
+          <View>
             {profile?.avatar_url ? (
               <Image
                 source={{ uri: profile.avatar_url }}
@@ -315,36 +266,59 @@ export default function ProfileScreen() {
           <Text style={styles.profileName}>
             {profile?.name || 'Anonymous User'}
           </Text>
-          <Text style={styles.profileEmail}>{profile?.email}</Text>
           {profile?.university && (
             <Text style={styles.profileUniversity}>
               🎓 {profile.university}
             </Text>
           )}
-          
-          <Button
-            title="Edit Profile"
-            onPress={handleEditProfile}
-            variant="primary"
-            size="medium"
-            style={styles.editButton}
-            icon={<Ionicons name="pencil" size={16} color={colors.background} />}
-          />
+
+          <TouchableOpacity onPress={handleEditProfile} style={styles.editButton}>
+            <Ionicons name="pencil" size={20} color="#FFF" />
+          </TouchableOpacity>
         </View>
 
-        {/* Settings */}
-        <View style={styles.settingsCard}>
-          <Text style={styles.settingsTitle}>Preferences</Text>
-          
-          <View style={[styles.settingItem, styles.settingItemLast]}>
-            <View style={styles.settingLeft}>
-              <Ionicons 
-                name={isDarkMode ? 'moon' : 'sunny'} 
-                size={20} 
-                color={colors.tint} 
-                style={styles.settingIcon}
-              />
-              <Text style={styles.settingText}>Dark Mode</Text>
+        {/* Menu Section: Account */}
+        <View style={styles.menuSection}>
+          <Text style={styles.menuSectionTitle}>Account</Text>
+          <TouchableOpacity style={styles.menuItem}>
+            <View style={styles.menuItemContent}>
+              <View style={[styles.menuIcon, { backgroundColor: colors.tint }]}>
+                <Ionicons name="notifications-outline" size={20} color={colors.background} />
+              </View>
+              <View style={styles.menuTextContainer}>
+                <Text style={styles.menuText}>Notifications</Text>
+                <Text style={styles.menuSubText}>Manage your alerts</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={colors.muted} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={[styles.menuItem, styles.menuItemLast]} onPress={() => router.push('/privacy')}>
+            <View style={styles.menuItemContent}>
+              <View style={[styles.menuIcon, { backgroundColor: Colors.semantic.info }]}>
+                <Ionicons name="lock-closed-outline" size={20} color={'#FFF'} />
+              </View>
+              <View style={styles.menuTextContainer}>
+                <Text style={styles.menuText}>Privacy & Security</Text>
+                <Text style={styles.menuSubText}>Control your data</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={colors.muted} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Menu Section: Preferences */}
+        <View style={styles.menuSection}>
+          <Text style={styles.menuSectionTitle}>Preferences</Text>
+          <View style={[styles.menuItem, styles.menuItemLast]}>
+            <View style={styles.menuItemContent}>
+              <View style={[styles.menuIcon, { backgroundColor: '#333' }]}>
+                <Ionicons name={isDarkMode ? 'moon-outline' : 'sunny-outline'} size={20} color={'#FFF'} />
+              </View>
+              <View style={styles.menuTextContainer}>
+                <Text style={styles.menuText}>Dark Mode</Text>
+                <Text style={styles.menuSubText}>{isDarkMode ? 'Enabled' : 'Disabled'}</Text>
+              </View>
             </View>
             <Switch
               value={isDarkMode}
@@ -355,58 +329,29 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* Menu Items */}
-        <View style={styles.menuCard}>
-          <Text style={styles.menuTitle}>Account</Text>
-          
-          <TouchableOpacity style={styles.menuItem}>
-            <View style={styles.menuLeft}>
-              <Ionicons 
-                name="notifications-outline" 
-                size={20} 
-                color={colors.tint} 
-                style={styles.menuIcon}
-              />
-              <Text style={styles.menuText}>Notifications</Text>
+        {/* Menu Section: Support */}
+        <View style={styles.menuSection}>
+          <Text style={styles.menuSectionTitle}>Support</Text>
+          <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/help')}>
+            <View style={styles.menuItemContent}>
+              <View style={[styles.menuIcon, { backgroundColor: Colors.semantic.success }]}>
+                <Ionicons name="help-circle-outline" size={20} color={'#FFF'} />
+              </View>
+              <View style={styles.menuTextContainer}>
+                <Text style={styles.menuText}>Help & Support</Text>
+              </View>
             </View>
             <Ionicons name="chevron-forward" size={20} color={colors.muted} />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.menuItem}>
-            <View style={styles.menuLeft}>
-              <Ionicons 
-                name="lock-closed-outline" 
-                size={20} 
-                color={colors.tint} 
-                style={styles.menuIcon}
-              />
-              <Text style={styles.menuText}>Privacy & Security</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.muted} />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.menuItem}>
-            <View style={styles.menuLeft}>
-              <Ionicons 
-                name="help-circle-outline" 
-                size={20} 
-                color={colors.tint} 
-                style={styles.menuIcon}
-              />
-              <Text style={styles.menuText}>Help & Support</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.muted} />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={[styles.menuItem, styles.menuItemLast]}>
-            <View style={styles.menuLeft}>
-              <Ionicons 
-                name="information-circle-outline" 
-                size={20} 
-                color={colors.tint} 
-                style={styles.menuIcon}
-              />
-              <Text style={styles.menuText}>About</Text>
+          <TouchableOpacity style={[styles.menuItem, styles.menuItemLast]} onPress={() => router.push('/about')}>
+            <View style={styles.menuItemContent}>
+              <View style={[styles.menuIcon, { backgroundColor: '#6B7280' }]}>
+                <Ionicons name="information-circle-outline" size={20} color={'#FFF'} />
+              </View>
+              <View style={styles.menuTextContainer}>
+                <Text style={styles.menuText}>About</Text>
+              </View>
             </View>
             <Ionicons name="chevron-forward" size={20} color={colors.muted} />
           </TouchableOpacity>
@@ -421,7 +366,7 @@ export default function ProfileScreen() {
           loading={signingOut}
           disabled={signingOut}
           style={styles.signOutButton}
-          icon={!signingOut && <Ionicons name="log-out-outline" size={16} color={colors.tint} />}
+          icon={!signingOut && <Ionicons name="log-out-outline" size={16} color={colors.destructive} />}
         />
       </ScrollView>
     </SafeAreaView>

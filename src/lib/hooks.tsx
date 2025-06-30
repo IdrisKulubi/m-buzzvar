@@ -1,10 +1,20 @@
-import { useEffect, useState } from 'react'
+import React, { createContext, useContext, useEffect, useState } from 'react'
 import { Session, User } from '@supabase/supabase-js'
 import * as Location from 'expo-location'
 import { supabase } from './supabase'
 
-// Auth hook
-export function useAuth() {
+// Auth context
+interface AuthContextType {
+  session: Session | null
+  user: User | null
+  loading: boolean
+  signOut: () => Promise<{ error: any }>
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined)
+
+// Auth Provider component
+export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
@@ -99,12 +109,23 @@ export function useAuth() {
     }
   };
 
-  return {
+  const value = {
     session,
     user,
     loading,
     signOut: handleSignOut,
   }
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+}
+
+// Auth hook
+export function useAuth() {
+  const context = useContext(AuthContext)
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider')
+  }
+  return context
 }
 
 // Location hook
