@@ -1,6 +1,6 @@
 # Buzzvar - Club Discovery & Party Planning App
 
-A TikTok-style mobile app for discovering nightlife venues and organizing party groups, built with Expo, React Native, and Supabase.
+A  mobile app for discovering nightlife venues and organizing party groups, built with Expo, React Native, and Supabase.
 
 ## 🚀 Features
 
