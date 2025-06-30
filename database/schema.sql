@@ -226,4 +226,35 @@ $$ language 'plpgsql';
 
 CREATE TRIGGER add_creator_to_group_trigger
     AFTER INSERT ON public.party_groups
-    FOR EACH ROW EXECUTE FUNCTION add_creator_to_group(); 
+    FOR EACH ROW EXECUTE FUNCTION add_creator_to_group();
+
+-- Reviews Table
+CREATE TABLE public.reviews (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  venue_id UUID REFERENCES public.venues(id) ON DELETE CASCADE NOT NULL,
+  user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
+  rating SMALLINT NOT NULL CHECK (rating >= 1 AND rating <= 5),
+  comment TEXT,
+  created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+
+  UNIQUE (user_id, venue_id)
+);
+
+-- RLS Policies for Reviews
+ALTER TABLE public.reviews ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow public read access" ON public.reviews FOR SELECT USING (true);
+CREATE POLICY "Allow authenticated users to insert" ON public.reviews FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Allow users to update their own review" ON public.reviews FOR UPDATE USING (auth.uid() = user_id);
+
+-- View to get venues with their average rating and review count
+CREATE OR REPLACE VIEW public.venues_with_ratings AS
+SELECT
+  v.*,
+  COALESCE(AVG(r.rating), 0)::float AS average_rating,
+  COUNT(r.id) AS review_count
+FROM
+  public.venues v
+LEFT JOIN
+  public.reviews r ON v.id = r.venue_id
+GROUP BY
+  v.id; 

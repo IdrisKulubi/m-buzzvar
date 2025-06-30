@@ -17,6 +17,7 @@ import { useToast } from '@/src/lib/ToastProvider';
 import { toggleBookmark, recordClubView } from '@/src/actions/clubs';
 import { BottomSheetModal, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import VenueDetailsSheet from './VenueDetailsSheet';
+import StarRating from './StarRating';
 
 const SwipeFeed: React.FC = () => {
   const colorScheme = useColorScheme() ?? 'dark';
@@ -27,6 +28,7 @@ const SwipeFeed: React.FC = () => {
   const [venues, setVenues] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedVenue, setSelectedVenue] = useState<any | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Bottom sheet ref and snap points
   const bottomSheetModalRef = useRef<BottomSheetModal>(null);
@@ -34,8 +36,7 @@ const SwipeFeed: React.FC = () => {
 
   const styles = useMemo(() => getStyles(colors), [colors]);
 
-  const fetchVenues = useCallback(async () => {
-    setLoading(true);
+  const loadVenues = useCallback(async () => {
     let bookmarkedIds = new Set();
     
     if (user) {
@@ -49,7 +50,7 @@ const SwipeFeed: React.FC = () => {
     }
 
     const { data, error } = await supabase
-      .from('venues')
+      .from('venues_with_ratings')
       .select('*, menus(*), promotions(*)')
       .limit(20);
 
@@ -63,12 +64,24 @@ const SwipeFeed: React.FC = () => {
         isLiked: false, // Placeholder for like state
       }));
       setVenues(processedVenues);
+      
+      // If a venue is open in the sheet, update its data as well
+      if (selectedVenue) {
+        const updatedSelected = processedVenues.find(v => v.id === selectedVenue.id);
+        if (updatedSelected) {
+          setSelectedVenue(updatedSelected);
+        }
+      }
     }
-    setLoading(false);
-  }, [user]);
+  }, [user, showToast, selectedVenue]);
 
   useEffect(() => {
-    fetchVenues();
+    const initialLoad = async () => {
+      setLoading(true);
+      await loadVenues();
+      setLoading(false);
+    }
+    initialLoad();
   }, [user]);
 
   const handlePresentDetails = useCallback((venue: any) => {
@@ -114,8 +127,10 @@ const SwipeFeed: React.FC = () => {
   }, [user, venues, showToast]);
 
   const handleRefresh = useCallback(async () => {
-    await fetchVenues();
-  }, [fetchVenues]);
+    setRefreshing(true);
+    await loadVenues();
+    setRefreshing(false);
+  }, [loadVenues]);
 
   const formatHours = (hours: string | null) => {
     if (!hours) return 'Hours not available';
@@ -150,6 +165,12 @@ const SwipeFeed: React.FC = () => {
 
       <View style={styles.cardContent}>
         <Text style={styles.cardTitle}>{item.name}</Text>
+        <View style={styles.ratingContainer}>
+          <StarRating rating={item.average_rating} size={18} />
+          <Text style={styles.ratingText}>
+            {item.average_rating.toFixed(1)} ({item.review_count} reviews)
+          </Text>
+        </View>
         <Text style={styles.cardDescription} numberOfLines={2}>
           {item.description}
         </Text>
@@ -210,7 +231,7 @@ const SwipeFeed: React.FC = () => {
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
         onRefresh={handleRefresh}
-        refreshing={loading}
+        refreshing={refreshing}
       />
       
       <BottomSheetModal
@@ -225,7 +246,7 @@ const SwipeFeed: React.FC = () => {
         handleIndicatorStyle={{ backgroundColor: colors.muted }}
       >
         {selectedVenue && (
-          <VenueDetailsSheet venue={selectedVenue} />
+          <VenueDetailsSheet venue={selectedVenue} onDataNeedsRefresh={loadVenues} />
         )}
       </BottomSheetModal>
     </>
@@ -249,30 +270,29 @@ const getStyles = (colors: typeof Colors.dark) => StyleSheet.create({
     elevation: 4,
     borderWidth: 1,
     borderColor: colors.border,
+    overflow: 'hidden',
   },
   cardImage: {
     width: '100%',
     height: 200,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
     backgroundColor: colors.border,
   },
   promotionBadge: {
     position: 'absolute',
     top: 12,
     left: 12,
-    backgroundColor: colors.tint,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 6,
+    backgroundColor: colors.tint,
     paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 20,
     gap: 6,
   },
   promotionText: {
     color: colors.background,
-    fontSize: 12,
     fontWeight: 'bold',
+    fontSize: 12,
   },
   cardContent: {
     padding: 16,
@@ -283,11 +303,21 @@ const getStyles = (colors: typeof Colors.dark) => StyleSheet.create({
     color: colors.text,
     marginBottom: 8,
   },
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 8,
+  },
+  ratingText: {
+    fontSize: 14,
+    color: colors.muted,
+  },
   cardDescription: {
     fontSize: 14,
     color: colors.muted,
-    marginBottom: 16,
     lineHeight: 20,
+    marginBottom: 12,
   },
   detailsRow: {
     flexDirection: 'row',

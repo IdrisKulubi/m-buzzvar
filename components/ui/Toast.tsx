@@ -46,7 +46,7 @@ const Toast: React.FC<ToastProps> = ({
 
     // Animate in
     Animated.timing(slideAnim, {
-      toValue: Platform.OS === 'ios' ? 0 : 16,
+      toValue: Platform.OS === 'ios' ? 20 : 16,
       duration: 400,
       easing: Easing.out(Easing.ease),
       useNativeDriver: true,

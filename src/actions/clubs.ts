@@ -313,33 +313,59 @@ export async function getNearbyVenues(
   longitude: number,
   radiusKm: number = 10
 ) {
-  try {
-    const { data: venues, error } = await supabase
-      .from('venues')
-      .select('*')
-      .not('latitude', 'is', null)
-      .not('longitude', 'is', null)
+  // This would ideally be a call to a PostgREST function
+  // for performance, but this is a simple implementation.
+  const { data, error } = await supabase.from('venues').select('*');
 
-    if (error) throw error
-
-    if (!venues) return { data: [], error: null }
-
-    // Filter and sort by distance
-    const nearbyVenues = venues
-      .map((venue) => ({
-        ...venue,
-        distance: calculateDistance(
-          latitude,
-          longitude,
-          venue.latitude!,
-          venue.longitude!
-        ),
-      }))
-      .filter((venue) => venue.distance <= radiusKm)
-      .sort((a, b) => a.distance - b.distance)
-
-    return { data: nearbyVenues, error: null }
-  } catch (error) {
-    return { data: [], error }
+  if (error) {
+    console.error('Error fetching venues for nearby search:', error);
+    return { data: [], error };
   }
+
+  const nearby = data
+    .map((venue) => {
+      if (!venue.latitude || !venue.longitude) return null;
+      const distance = calculateDistance(latitude, longitude, venue.latitude, venue.longitude);
+      return { ...venue, distance };
+    })
+    .filter((v): v is VenueWithDistance => v !== null && v.distance! <= radiusKm)
+    .sort((a, b) => a.distance! - b.distance!);
+
+  return { data: nearby, error: null };
+}
+
+export async function addReview({
+  venueId,
+  userId,
+  rating,
+  comment,
+}: {
+  venueId: string;
+  userId: string;
+  rating: number;
+  comment: string;
+}) {
+  if (rating < 1 || rating > 5) {
+    return { data: null, error: { message: 'Rating must be between 1 and 5.' } };
+  }
+
+  const { data, error } = await supabase
+    .from('reviews')
+    .upsert(
+      {
+        venue_id: venueId,
+        user_id: userId,
+        rating: rating,
+        comment: comment.trim() || null,
+      },
+      { onConflict: 'user_id, venue_id' }
+    )
+    .select()
+    .single();
+    
+  if (error) {
+    console.error('Error adding or updating review:', error);
+  }
+
+  return { data, error };
 } 
