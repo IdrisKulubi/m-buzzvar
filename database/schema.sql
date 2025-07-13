@@ -226,7 +226,7 @@ $$ language 'plpgsql';
 
 CREATE TRIGGER add_creator_to_group_trigger
     AFTER INSERT ON public.party_groups
-    FOR EACH ROW EXECUTE FUNCTION add_creator_to_group();
+    FOR EACH ROW EXECUTE FUNCTION add_creator_to_group(); 
 
 -- Reviews Table
 CREATE TABLE public.reviews (

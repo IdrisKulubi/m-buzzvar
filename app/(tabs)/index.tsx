@@ -46,7 +46,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [featuredVenues, setFeaturedVenues] = useState<VenueWithDistance[]>([])
-  const [bookmarkedVenues, setBookmarkedVenues] = useState<VenueWithDistance[]>([])
+  const [bookmarkedVenues, setBookmarkedVenues] = useState<any[]>([])
   
   // Bottom Sheet state
   const [selectedVenue, setSelectedVenue] = useState<any | null>(null)
@@ -76,7 +76,7 @@ export default function HomeScreen() {
         // Fetch bookmarked venues with their details and promotions
         supabase
           .from('user_bookmarks')
-          .select('venues:venue_id(*, promotions(*))')
+          .select('venues:venue_id(*, promotions(*), reviews(count))')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false }),
       ])
@@ -95,21 +95,15 @@ export default function HomeScreen() {
       if (bookmarksResult.error) {
         console.error('Error fetching bookmarks:', bookmarksResult.error)
       } else {
-        const bookmarks = bookmarksResult.data?.map((b: any) => b.venues) || []
-        // We need to fetch the ratings for bookmarked venues separately
-        const bookmarkedIds = bookmarks.map(v => v.id);
-        const { data: ratingsData } = await supabase
-          .from('venues_with_ratings')
-          .select('id, average_rating, review_count')
-          .in('id', bookmarkedIds)
-        
-        const ratingsMap = new Map(ratingsData?.map(r => [r.id, r]));
-        const bookmarksWithRatings = bookmarks.map(b => ({
-          ...b,
-          ...ratingsMap.get(b.id)
-        }));
-
-        setBookmarkedVenues(bookmarksWithRatings)
+        const bookmarks = bookmarksResult.data?.map((b: any) => {
+          const venue = b.venues;
+          // Manually add review_count and average_rating if needed, or adjust view
+          return {
+            ...venue,
+            review_count: venue.reviews[0]?.count || 0,
+          };
+        }) || [];
+        setBookmarkedVenues(bookmarks)
       }
 
     } catch (error) {
@@ -413,7 +407,12 @@ export default function HomeScreen() {
         }}
         handleIndicatorStyle={{ backgroundColor: colors.muted }}
       >
-        {selectedVenue && <VenueDetailsSheet venue={selectedVenue} onDataNeedsRefresh={loadDashboardData} />}
+        {selectedVenue && (
+          <VenueDetailsSheet 
+            venue={selectedVenue} 
+            onDataNeedsRefresh={loadDashboardData}
+          />
+        )}
       </BottomSheetModal>
     </SafeAreaView>
   )

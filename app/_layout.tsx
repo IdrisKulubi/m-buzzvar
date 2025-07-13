@@ -74,7 +74,6 @@ function RootLayoutNav() {
       <Stack.Screen name="edit-profile" />
       <Stack.Screen name="help" />
       <Stack.Screen name="privacy" />
-      <Stack.Screen name="reviews" />
     </Stack>
   );
 }

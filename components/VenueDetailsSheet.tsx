@@ -1,13 +1,21 @@
 import React, { useMemo, useEffect, useState, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, useColorScheme, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  useColorScheme,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  FlatList,
+} from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import StarRating from './StarRating';
-import { BottomSheetModal } from '@gorhom/bottom-sheet';
+import { BottomSheetModal, useBottomSheetModal } from '@gorhom/bottom-sheet';
 import AddReviewSheet from './AddReviewSheet';
 import { supabase } from '@/src/lib/supabase';
-import { useRouter } from 'expo-router';
 
 const ReviewItem = ({ review }: { review: any }) => {
   const colorScheme = useColorScheme() ?? 'dark';
@@ -31,22 +39,28 @@ const VenueDetailsSheet = ({ venue, onDataNeedsRefresh }: { venue: any; onDataNe
   const colorScheme = useColorScheme() ?? 'dark';
   const colors = Colors[colorScheme];
   const styles = useMemo(() => getStyles(colors), [colors]);
-  const router = useRouter();
+
 
   const addReviewSheetRef = useRef<BottomSheetModal>(null);
   const snapPoints = useMemo(() => ['70%'], []);
   
   const [reviews, setReviews] = useState<any[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(true);
+  const [isShowingAllReviews, setIsShowingAllReviews] = useState(false);
 
-  const fetchReviews = useCallback(async () => {
+  const fetchReviews = useCallback(async (limit: number | null = 3) => {
     setReviewsLoading(true);
-    const { data, error } = await supabase
+    let query = supabase
       .from('reviews')
-      .select('*, users(name)', { count: 'exact' })
+      .select('*, users(name)')
       .eq('venue_id', venue.id)
-      .order('created_at', { ascending: false })
-      .limit(3);
+      .order('created_at', { ascending: false });
+
+    if (limit) {
+      query = query.limit(limit);
+    }
+    
+    const { data, error } = await query;
 
     if (error) {
       console.error("Failed to fetch reviews:", error);
@@ -57,15 +71,27 @@ const VenueDetailsSheet = ({ venue, onDataNeedsRefresh }: { venue: any; onDataNe
   }, [venue.id]);
 
   useEffect(() => {
-    fetchReviews();
+    // Fetch initial preview
+    fetchReviews(3);
   }, [fetchReviews]);
 
   const handlePresentAddReview = () => addReviewSheetRef.current?.present();
   const handleReviewSubmitted = () => {
     addReviewSheetRef.current?.dismiss();
-    // Refresh reviews and venue data to show new average
-    fetchReviews();
+    fetchReviews(isShowingAllReviews ? null : 3); 
     onDataNeedsRefresh();
+  };
+
+  const handleViewAllReviews = () => {
+    fetchReviews(null); // Fetch all reviews
+    setIsShowingAllReviews(true);
+    // Note: Sheet expansion is handled by the parent component
+  };
+
+  const handleShowSummary = () => {
+    fetchReviews(3); // Go back to fetching only 3
+    setIsShowingAllReviews(false);
+    // Note: Sheet resizing is handled by the parent component
   };
 
   const formatHours = (hours: string | null) => {
@@ -80,85 +106,102 @@ const VenueDetailsSheet = ({ venue, onDataNeedsRefresh }: { venue: any; onDataNe
     }
   };
 
+  const renderReviewList = () => (
+    <View style={{ flex: 1 }}>
+       <TouchableOpacity onPress={handleShowSummary} style={styles.backButton}>
+          <Ionicons name="chevron-back" size={24} color={colors.text} />
+          <Text style={styles.backButtonText}>Back to Details</Text>
+        </TouchableOpacity>
+      <FlatList
+        data={reviews}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => <ReviewItem review={item} />}
+        contentContainerStyle={styles.listContent}
+        onRefresh={() => fetchReviews(null)}
+        refreshing={reviewsLoading}
+        ListHeaderComponent={<Text style={styles.fullReviewsTitle}>All Reviews</Text>}
+      />
+    </View>
+  );
+
+  const renderSummary = () => (
+    <ScrollView contentContainerStyle={styles.container}>
+      <Image source={{ uri: venue.cover_image_url }} style={styles.headerImage} />
+      
+      <View style={styles.content}>
+        <Text style={styles.title}>{venue.name}</Text>
+        
+        <View style={styles.ratingRow}>
+          <StarRating rating={venue.average_rating} size={22} color={colors.tint} />
+          <Text style={styles.ratingText}>
+            {venue.average_rating > 0 ? venue.average_rating.toFixed(1) : 'No Ratings'}{' '}
+            ({venue.review_count} {venue.review_count === 1 ? 'review' : 'reviews'})
+          </Text>
+        </View>
+
+        {venue.promotions?.length > 0 && (
+          <View style={styles.promotionBadge}>
+            <Ionicons name="star" size={16} color={colors.background} />
+            <Text style={styles.promotionText}>{venue.promotions[0].title}</Text>
+          </View>
+        )}
+        
+        <Text style={styles.description}>{venue.description}</Text>
+        
+        <View style={styles.separator} />
+        
+        <Text style={styles.sectionTitle}>Reviews</Text>
+
+        {reviewsLoading ? (
+          <ActivityIndicator color={colors.tint} style={{ marginVertical: 20 }}/>
+        ) : reviews.length > 0 ? (
+          <>
+            {reviews.map(r => <ReviewItem key={r.id} review={r} />)}
+            {venue.review_count > 2 && (
+              <TouchableOpacity style={styles.seeAllButton} onPress={handleViewAllReviews}>
+                <Text style={styles.seeAllText}>View all {venue.review_count} reviews</Text>
+                <Ionicons name="chevron-forward" size={16} color={colors.tint} />
+              </TouchableOpacity>
+            )}
+          </>
+        ) : (
+          <View style={styles.reviewsPlaceholder}>
+            <Text style={styles.infoText}>No reviews yet. Be the first!</Text>
+          </View>
+        )}
+
+        <TouchableOpacity style={styles.addReviewButton} onPress={handlePresentAddReview}>
+          <Ionicons name="create-outline" size={20} color={colors.background} />
+          <Text style={styles.addReviewButtonText}>Add Your Review</Text>
+        </TouchableOpacity>
+
+        <View style={styles.separator} />
+        
+        <Text style={styles.sectionTitle}>Details</Text>
+        
+        <View style={styles.infoRow}>
+          <Ionicons name="location-outline" size={20} color={colors.tint} style={styles.infoIcon} />
+          <Text style={styles.infoText}>{venue.address}</Text>
+        </View>
+        
+        <View style={styles.infoRow}>
+          <Feather name="clock" size={20} color={colors.tint} style={styles.infoIcon} />
+          <Text style={styles.infoText}>{formatHours(venue.hours)}</Text>
+        </View>
+        
+        {venue.contact && (
+          <View style={styles.infoRow}>
+            <Ionicons name="call-outline" size={20} color={colors.tint} style={styles.infoIcon} />
+            <Text style={styles.infoText}>{venue.contact}</Text>
+          </View>
+        )}
+      </View>
+    </ScrollView>
+  );
+
   return (
     <>
-      <ScrollView contentContainerStyle={styles.container}>
-        <Image source={{ uri: venue.cover_image_url }} style={styles.headerImage} />
-        
-        <View style={styles.content}>
-          <Text style={styles.title}>{venue.name}</Text>
-          
-          <View style={styles.ratingRow}>
-            <StarRating rating={venue.average_rating} size={22} color={colors.tint} />
-            <Text style={styles.ratingText}>
-              {venue.average_rating > 0 ? venue.average_rating.toFixed(1) : 'No Ratings'}{' '}
-              ({venue.review_count} {venue.review_count === 1 ? 'review' : 'reviews'})
-            </Text>
-          </View>
-
-          {venue.promotions?.length > 0 && (
-            <View style={styles.promotionBadge}>
-              <Ionicons name="star" size={16} color={colors.background} />
-              <Text style={styles.promotionText}>{venue.promotions[0].title}</Text>
-            </View>
-          )}
-          
-          <Text style={styles.description}>{venue.description}</Text>
-          
-          <View style={styles.separator} />
-          
-          <View style={styles.reviewsSectionHeader}>
-            <Text style={styles.sectionTitle}>Reviews</Text>
-            <TouchableOpacity style={styles.addReviewButton} onPress={handlePresentAddReview}>
-              <Ionicons name="create-outline" size={16} color={colors.tint} />
-              <Text style={styles.addReviewButtonText}>Add Review</Text>
-            </TouchableOpacity>
-          </View>
-
-          {reviewsLoading ? (
-            <ActivityIndicator color={colors.tint} style={{ marginVertical: 20 }}/>
-          ) : reviews.length > 0 ? (
-            <>
-              {reviews.map(r => <ReviewItem key={r.id} review={r} />)}
-              {venue.review_count > 3 && (
-                <TouchableOpacity 
-                  style={styles.button} 
-                  onPress={() => router.push({ pathname: '/reviews', params: { venueId: venue.id, venueName: venue.name }})}
-                >
-                  <Text style={styles.buttonText}>View all {venue.review_count} reviews</Text>
-                </TouchableOpacity>
-              )}
-            </>
-          ) : (
-            <View style={styles.reviewsPlaceholder}>
-              <Text style={styles.infoText}>No reviews yet. Be the first!</Text>
-            </View>
-          )}
-
-          <View style={styles.separator} />
-          
-          <Text style={styles.sectionTitle}>Details</Text>
-          
-          <View style={styles.infoRow}>
-            <Ionicons name="location-outline" size={20} color={colors.tint} style={styles.infoIcon} />
-            <Text style={styles.infoText}>{venue.address}</Text>
-          </View>
-          
-          <View style={styles.infoRow}>
-            <Feather name="clock" size={20} color={colors.tint} style={styles.infoIcon} />
-            <Text style={styles.infoText}>{formatHours(venue.hours)}</Text>
-          </View>
-          
-          {venue.contact && (
-            <View style={styles.infoRow}>
-              <Ionicons name="call-outline" size={20} color={colors.tint} style={styles.infoIcon} />
-              <Text style={styles.infoText}>{venue.contact}</Text>
-            </View>
-          )}
-          
-        </View>
-      </ScrollView>
-
+      {isShowingAllReviews ? renderReviewList() : renderSummary()}
       <BottomSheetModal
         ref={addReviewSheetRef}
         index={0}
@@ -230,36 +273,57 @@ const getStyles = (colors: any) => StyleSheet.create({
     backgroundColor: colors.border,
     marginVertical: 20,
   },
-  reviewsSectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     color: colors.text,
+    marginBottom: 16,
+  },
+  seeAllButton: {
+    marginTop: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: colors.surface,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  seeAllText: {
+    color: colors.tint,
+    fontWeight: '600',
+    fontSize: 16,
   },
   reviewsPlaceholder: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 30,
+    backgroundColor: colors.background,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 8,
     marginBottom: 16,
   },
-  button: {
+  addReviewButton: {
     backgroundColor: colors.tint,
-    padding: 16,
-    borderRadius: 8,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 12,
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'center',
     gap: 10,
+    marginTop: 16,
+    shadowColor: colors.text,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  buttonText: {
+  addReviewButtonText: {
     color: colors.background,
     fontSize: 16,
     fontWeight: 'bold',
@@ -307,20 +371,28 @@ const getStyles = (colors: any) => StyleSheet.create({
     color: colors.muted,
     textAlign: 'right',
   },
-  addReviewButton: {
+  backButton: {
+    padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
+    borderBottomWidth: 1,
     borderColor: colors.border,
   },
-  addReviewButtonText: {
+  backButtonText: {
+    fontSize: 17,
+    fontWeight: '600',
     color: colors.tint,
+    marginLeft: 8,
+  },
+  listContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 40,
+  },
+  fullReviewsTitle: {
+    fontSize: 24,
     fontWeight: 'bold',
+    color: colors.text,
+    paddingVertical: 16,
   },
 });
 

@@ -246,7 +246,10 @@ const SwipeFeed: React.FC = () => {
         handleIndicatorStyle={{ backgroundColor: colors.muted }}
       >
         {selectedVenue && (
-          <VenueDetailsSheet venue={selectedVenue} onDataNeedsRefresh={loadVenues} />
+          <VenueDetailsSheet 
+            venue={selectedVenue} 
+            onDataNeedsRefresh={loadVenues}
+          />
         )}
       </BottomSheetModal>
     </>
