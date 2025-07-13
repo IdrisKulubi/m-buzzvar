@@ -69,14 +69,14 @@ export default function HomeScreen() {
         getUserProfile(user.id),
         // Fetch venues with promotions for the featured section
         supabase
-          .from('venues')
+          .from('venues_with_ratings')
           .select('*, promotions(*)')
           .order('created_at', { ascending: false })
           .limit(10),
         // Fetch bookmarked venues with their details and promotions
         supabase
           .from('user_bookmarks')
-          .select('venues(*, promotions(*))')
+          .select('venues:venue_id(*, promotions(*))')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false }),
       ])
@@ -96,7 +96,20 @@ export default function HomeScreen() {
         console.error('Error fetching bookmarks:', bookmarksResult.error)
       } else {
         const bookmarks = bookmarksResult.data?.map((b: any) => b.venues) || []
-        setBookmarkedVenues(bookmarks)
+        // We need to fetch the ratings for bookmarked venues separately
+        const bookmarkedIds = bookmarks.map(v => v.id);
+        const { data: ratingsData } = await supabase
+          .from('venues_with_ratings')
+          .select('id, average_rating, review_count')
+          .in('id', bookmarkedIds)
+        
+        const ratingsMap = new Map(ratingsData?.map(r => [r.id, r]));
+        const bookmarksWithRatings = bookmarks.map(b => ({
+          ...b,
+          ...ratingsMap.get(b.id)
+        }));
+
+        setBookmarkedVenues(bookmarksWithRatings)
       }
 
     } catch (error) {
@@ -400,7 +413,7 @@ export default function HomeScreen() {
         }}
         handleIndicatorStyle={{ backgroundColor: colors.muted }}
       >
-        {selectedVenue && <VenueDetailsSheet venue={selectedVenue} />}
+        {selectedVenue && <VenueDetailsSheet venue={selectedVenue} onDataNeedsRefresh={loadDashboardData} />}
       </BottomSheetModal>
     </SafeAreaView>
   )

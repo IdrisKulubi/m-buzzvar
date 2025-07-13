@@ -2,13 +2,12 @@ import React, { useMemo, useEffect, useState, useCallback, useRef } from 'react'
 import { View, Text, StyleSheet, useColorScheme, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons, Feather } from '@expo/vector-icons';
-import { router } from 'expo-router';
 import { Colors } from '@/constants/Colors';
 import StarRating from './StarRating';
-import RatingBreakdown from './RatingBreakdown';
 import { BottomSheetModal } from '@gorhom/bottom-sheet';
 import AddReviewSheet from './AddReviewSheet';
 import { supabase } from '@/src/lib/supabase';
+import { useRouter } from 'expo-router';
 
 const ReviewItem = ({ review }: { review: any }) => {
   const colorScheme = useColorScheme() ?? 'dark';
@@ -17,10 +16,10 @@ const ReviewItem = ({ review }: { review: any }) => {
   return (
     <View style={getStyles(colors).reviewItem}>
       <View style={getStyles(colors).reviewHeader}>
-        <Text style={getStyles(colors).reviewAuthor}>{review.author_name || 'Anonymous'}</Text>
+        <Text style={getStyles(colors).reviewAuthor}>{review.users?.name || 'Anonymous'}</Text>
         <StarRating rating={review.rating} size={14} color={colors.tint} />
       </View>
-      {review.comment && <Text style={getStyles(colors).reviewComment}>{review.comment}</Text>}
+      <Text style={getStyles(colors).reviewComment}>{review.comment}</Text>
       <Text style={getStyles(colors).reviewDate}>
         {new Date(review.created_at).toLocaleDateString()}
       </Text>
@@ -32,31 +31,42 @@ const VenueDetailsSheet = ({ venue, onDataNeedsRefresh }: { venue: any; onDataNe
   const colorScheme = useColorScheme() ?? 'dark';
   const colors = Colors[colorScheme];
   const styles = useMemo(() => getStyles(colors), [colors]);
+  const router = useRouter();
 
-  const [reviewDetails, setReviewDetails] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const addReviewSheetRef = useRef<BottomSheetModal>(null);
+  const snapPoints = useMemo(() => ['70%'], []);
+  
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
 
-  const fetchReviewDetails = useCallback(async () => {
-    if (!venue.id) return;
-    setLoading(true);
-    const { data, error } = await supabase.rpc('get_venue_review_details', { p_venue_id: venue.id });
-    
+  const fetchReviews = useCallback(async () => {
+    setReviewsLoading(true);
+    const { data, error } = await supabase
+      .from('reviews')
+      .select('*, users(name)', { count: 'exact' })
+      .eq('venue_id', venue.id)
+      .order('created_at', { ascending: false })
+      .limit(3);
+
     if (error) {
-      console.error("Failed to fetch review details:", error);
-    } else if (data && data.length > 0) {
-      setReviewDetails(data[0]);
+      console.error("Failed to fetch reviews:", error);
+    } else {
+      setReviews(data);
     }
-    setLoading(false);
+    setReviewsLoading(false);
   }, [venue.id]);
 
   useEffect(() => {
-    fetchReviewDetails();
-  }, [fetchReviewDetails]);
+    fetchReviews();
+  }, [fetchReviews]);
 
-  // When a review is submitted from another screen, we get the signal to refresh
-  useEffect(() => {
-    fetchReviewDetails();
-  }, [venue]); // Re-fetch if the venue object itself changes (e.g., from parent)
+  const handlePresentAddReview = () => addReviewSheetRef.current?.present();
+  const handleReviewSubmitted = () => {
+    addReviewSheetRef.current?.dismiss();
+    // Refresh reviews and venue data to show new average
+    fetchReviews();
+    onDataNeedsRefresh();
+  };
 
   const formatHours = (hours: string | null) => {
     if (!hours) return 'Hours not available';
@@ -71,72 +81,94 @@ const VenueDetailsSheet = ({ venue, onDataNeedsRefresh }: { venue: any; onDataNe
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Image source={{ uri: venue.cover_image_url }} style={styles.headerImage} />
-      
-      <View style={styles.content}>
-        <Text style={styles.title}>{venue.name}</Text>
+    <>
+      <ScrollView contentContainerStyle={styles.container}>
+        <Image source={{ uri: venue.cover_image_url }} style={styles.headerImage} />
         
-        <View style={styles.ratingRow}>
-          <StarRating rating={reviewDetails?.average_rating ?? 0} size={22} color={colors.tint} />
-          <Text style={styles.ratingText}>
-            {(reviewDetails?.average_rating ?? 0) > 0 ? reviewDetails.average_rating.toFixed(1) : 'No Ratings'}{' '}
-            ({reviewDetails?.review_count ?? 0} {reviewDetails?.review_count === 1 ? 'review' : 'reviews'})
-          </Text>
-        </View>
+        <View style={styles.content}>
+          <Text style={styles.title}>{venue.name}</Text>
+          
+          <View style={styles.ratingRow}>
+            <StarRating rating={venue.average_rating} size={22} color={colors.tint} />
+            <Text style={styles.ratingText}>
+              {venue.average_rating > 0 ? venue.average_rating.toFixed(1) : 'No Ratings'}{' '}
+              ({venue.review_count} {venue.review_count === 1 ? 'review' : 'reviews'})
+            </Text>
+          </View>
 
-        <Text style={styles.description}>{venue.description}</Text>
-        
-        <View style={styles.separator} />
-        
-        <Text style={styles.sectionTitle}>Ratings & Reviews</Text>
-        
-        {loading ? (
-          <ActivityIndicator color={colors.tint} style={{ marginVertical: 20 }}/>
-        ) : reviewDetails && reviewDetails.review_count > 0 ? (
-          <>
-            <RatingBreakdown 
-              breakdown={reviewDetails.rating_breakdown} 
-              totalReviews={reviewDetails.review_count} 
-            />
-            {reviewDetails.latest_reviews?.map((r: any) => <ReviewItem key={r.id} review={r} />)}
-            <TouchableOpacity 
-              style={styles.button} 
-              onPress={() => router.push({ pathname: '/reviews', params: { venueId: venue.id, venueName: venue.name }})}
-            >
-              <Text style={styles.buttonText}>See all {reviewDetails.review_count} reviews</Text>
+          {venue.promotions?.length > 0 && (
+            <View style={styles.promotionBadge}>
+              <Ionicons name="star" size={16} color={colors.background} />
+              <Text style={styles.promotionText}>{venue.promotions[0].title}</Text>
+            </View>
+          )}
+          
+          <Text style={styles.description}>{venue.description}</Text>
+          
+          <View style={styles.separator} />
+          
+          <View style={styles.reviewsSectionHeader}>
+            <Text style={styles.sectionTitle}>Reviews</Text>
+            <TouchableOpacity style={styles.addReviewButton} onPress={handlePresentAddReview}>
+              <Ionicons name="create-outline" size={16} color={colors.tint} />
+              <Text style={styles.addReviewButtonText}>Add Review</Text>
             </TouchableOpacity>
-          </>
-        ) : (
-          <View style={styles.reviewsPlaceholder}>
-            <Text style={styles.infoText}>No reviews yet. Be the first!</Text>
-            {/* You can add a button here to prompt the first review */}
           </View>
-        )}
 
-        <View style={styles.separator} />
-        
-        <Text style={styles.sectionTitle}>Details</Text>
-        
-        <View style={styles.infoRow}>
-          <Ionicons name="location-outline" size={20} color={colors.tint} style={styles.infoIcon} />
-          <Text style={styles.infoText}>{venue.address}</Text>
-        </View>
-        
-        <View style={styles.infoRow}>
-          <Feather name="clock" size={20} color={colors.tint} style={styles.infoIcon} />
-          <Text style={styles.infoText}>{formatHours(venue.hours)}</Text>
-        </View>
-        
-        {venue.contact && (
+          {reviewsLoading ? (
+            <ActivityIndicator color={colors.tint} style={{ marginVertical: 20 }}/>
+          ) : reviews.length > 0 ? (
+            <>
+              {reviews.map(r => <ReviewItem key={r.id} review={r} />)}
+              {venue.review_count > 3 && (
+                <TouchableOpacity 
+                  style={styles.button} 
+                  onPress={() => router.push({ pathname: '/reviews', params: { venueId: venue.id, venueName: venue.name }})}
+                >
+                  <Text style={styles.buttonText}>View all {venue.review_count} reviews</Text>
+                </TouchableOpacity>
+              )}
+            </>
+          ) : (
+            <View style={styles.reviewsPlaceholder}>
+              <Text style={styles.infoText}>No reviews yet. Be the first!</Text>
+            </View>
+          )}
+
+          <View style={styles.separator} />
+          
+          <Text style={styles.sectionTitle}>Details</Text>
+          
           <View style={styles.infoRow}>
-            <Ionicons name="call-outline" size={20} color={colors.tint} style={styles.infoIcon} />
-            <Text style={styles.infoText}>{venue.contact}</Text>
+            <Ionicons name="location-outline" size={20} color={colors.tint} style={styles.infoIcon} />
+            <Text style={styles.infoText}>{venue.address}</Text>
           </View>
-        )}
-        
-      </View>
-    </ScrollView>
+          
+          <View style={styles.infoRow}>
+            <Feather name="clock" size={20} color={colors.tint} style={styles.infoIcon} />
+            <Text style={styles.infoText}>{formatHours(venue.hours)}</Text>
+          </View>
+          
+          {venue.contact && (
+            <View style={styles.infoRow}>
+              <Ionicons name="call-outline" size={20} color={colors.tint} style={styles.infoIcon} />
+              <Text style={styles.infoText}>{venue.contact}</Text>
+            </View>
+          )}
+          
+        </View>
+      </ScrollView>
+
+      <BottomSheetModal
+        ref={addReviewSheetRef}
+        index={0}
+        snapPoints={snapPoints}
+        backgroundStyle={{ backgroundColor: colors.surface }}
+        handleIndicatorStyle={{ backgroundColor: colors.muted }}
+      >
+        <AddReviewSheet venueId={venue.id} onSubmitted={handleReviewSubmitted} />
+      </BottomSheetModal>
+    </>
   );
 };
 
@@ -177,16 +209,37 @@ const getStyles = (colors: any) => StyleSheet.create({
     lineHeight: 24,
     marginBottom: 20,
   },
+  promotionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.tint,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+    marginBottom: 16,
+    gap: 8,
+  },
+  promotionText: {
+    color: colors.background,
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
   separator: {
     height: 1,
     backgroundColor: colors.border,
     marginVertical: 20,
   },
+  reviewsSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     color: colors.text,
-    marginBottom: 16,
   },
   reviewsPlaceholder: {
     alignItems: 'center',
@@ -253,6 +306,21 @@ const getStyles = (colors: any) => StyleSheet.create({
     fontSize: 12,
     color: colors.muted,
     textAlign: 'right',
+  },
+  addReviewButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  addReviewButtonText: {
+    color: colors.tint,
+    fontWeight: 'bold',
   },
 });
 

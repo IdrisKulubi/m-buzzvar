@@ -74,6 +74,7 @@ function RootLayoutNav() {
       <Stack.Screen name="edit-profile" />
       <Stack.Screen name="help" />
       <Stack.Screen name="privacy" />
+      <Stack.Screen name="reviews" />
     </Stack>
   );
 }
@@ -93,11 +94,11 @@ export default function RootLayout() {
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
         <AuthProvider>
           <ToastProvider>
-            <BottomSheetModalProvider>
+          <BottomSheetModalProvider>
               <RootLayoutNav />
               <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
             </BottomSheetModalProvider>
-          </ToastProvider>
+            </ToastProvider>
         </AuthProvider>
       </ThemeProvider>
     </GestureHandlerRootView>
