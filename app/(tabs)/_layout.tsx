@@ -61,12 +61,12 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="groups"
+        name="live"
         options={{
-          title: 'Groups',
+          title: 'Live Vibe',
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons 
-              name={focused ? 'people' : 'people-outline'} 
+              name={focused ? 'pulse' : 'pulse-outline'} 
               size={size} 
               color={color} 
             />

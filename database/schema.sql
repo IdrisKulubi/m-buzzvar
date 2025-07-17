@@ -246,6 +246,45 @@ CREATE POLICY "Allow public read access" ON public.reviews FOR SELECT USING (tru
 CREATE POLICY "Allow authenticated users to insert" ON public.reviews FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Allow users to update their own review" ON public.reviews FOR UPDATE USING (auth.uid() = user_id);
 
+-- Vibe Checks Table
+CREATE TABLE public.vibe_checks (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    venue_id UUID REFERENCES public.venues(id) ON DELETE CASCADE NOT NULL,
+    user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
+    busyness_rating SMALLINT NOT NULL CHECK (busyness_rating >= 1 AND busyness_rating <= 5),
+    comment TEXT CHECK (LENGTH(comment) <= 280),
+    photo_url TEXT,
+    user_latitude DECIMAL(10, 8) NOT NULL,
+    user_longitude DECIMAL(11, 8) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+    
+    -- Constraint: One vibe check per user per venue per hour
+    CONSTRAINT unique_user_venue_hour UNIQUE (user_id, venue_id, DATE_TRUNC('hour', created_at))
+);
+
+-- Indexes for vibe checks performance
+CREATE INDEX idx_vibe_checks_venue_recent ON public.vibe_checks(venue_id, created_at DESC);
+CREATE INDEX idx_vibe_checks_recent ON public.vibe_checks(created_at DESC);
+CREATE INDEX idx_vibe_checks_user ON public.vibe_checks(user_id);
+
+-- RLS Policies for Vibe Checks
+ALTER TABLE public.vibe_checks ENABLE ROW LEVEL SECURITY;
+
+-- Anyone can view vibe checks
+CREATE POLICY "Anyone can view vibe checks" ON public.vibe_checks FOR SELECT USING (true);
+
+-- Users can insert their own vibe checks
+CREATE POLICY "Users can insert own vibe checks" ON public.vibe_checks FOR INSERT 
+WITH CHECK (auth.uid() = user_id);
+
+-- Users can update their own vibe checks (within 1 hour)
+CREATE POLICY "Users can update own recent vibe checks" ON public.vibe_checks FOR UPDATE 
+USING (auth.uid() = user_id AND created_at > NOW() - INTERVAL '1 hour');
+
+-- Users can delete their own vibe checks
+CREATE POLICY "Users can delete own vibe checks" ON public.vibe_checks FOR DELETE 
+USING (auth.uid() = user_id);
+
 -- View to get venues with their average rating and review count
 CREATE OR REPLACE VIEW public.venues_with_ratings AS
 SELECT

@@ -65,7 +65,11 @@ export interface Database {
           hours: string | null
           cover_image_url: string | null
           cover_video_url: string | null
+          latitude: number | null
+          longitude: number | null
+          address: string | null
           created_at: string
+          updated_at: string
         }
         Insert: {
           id?: string
@@ -76,7 +80,11 @@ export interface Database {
           hours?: string | null
           cover_image_url?: string | null
           cover_video_url?: string | null
+          latitude?: number | null
+          longitude?: number | null
+          address?: string | null
           created_at?: string
+          updated_at?: string
         }
         Update: {
           id?: string
@@ -87,7 +95,11 @@ export interface Database {
           hours?: string | null
           cover_image_url?: string | null
           cover_video_url?: string | null
+          latitude?: number | null
+          longitude?: number | null
+          address?: string | null
           created_at?: string
+          updated_at?: string
         }
       }
       party_groups: {
@@ -165,6 +177,41 @@ export interface Database {
           group_id?: string
           sender_id?: string
           content?: string
+          created_at?: string
+        }
+      }
+      vibe_checks: {
+        Row: {
+          id: string
+          venue_id: string
+          user_id: string
+          busyness_rating: 1 | 2 | 3 | 4 | 5
+          comment: string | null
+          photo_url: string | null
+          user_latitude: number
+          user_longitude: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          venue_id: string
+          user_id: string
+          busyness_rating: 1 | 2 | 3 | 4 | 5
+          comment?: string | null
+          photo_url?: string | null
+          user_latitude: number
+          user_longitude: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          venue_id?: string
+          user_id?: string
+          busyness_rating?: 1 | 2 | 3 | 4 | 5
+          comment?: string | null
+          photo_url?: string | null
+          user_latitude?: number
+          user_longitude?: number
           created_at?: string
         }
       }

@@ -11,11 +11,46 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons, Feather } from '@expo/vector-icons';
-import { Colors } from '@/constants/Colors';
+import { Colors } from '../constants/Colors';
 import StarRating from './StarRating';
-import { BottomSheetModal, useBottomSheetModal } from '@gorhom/bottom-sheet';
+import { BottomSheetModal } from '@gorhom/bottom-sheet';
 import AddReviewSheet from './AddReviewSheet';
-import { supabase } from '@/src/lib/supabase';
+import AddVibeCheckSheet from '../components/AddVibeCheckSheet';
+import { supabase } from '../src/lib/supabase';
+
+function formatDistanceToNow(date: Date): string {
+  const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
+
+  let interval = seconds / 31536000;
+  if (interval > 1) {
+    const years = Math.floor(interval);
+    return years + (years === 1 ? " year ago" : " years ago");
+  }
+  interval = seconds / 2592000;
+  if (interval > 1) {
+    const months = Math.floor(interval);
+    return months + (months === 1 ? " month ago" : " months ago");
+  }
+  interval = seconds / 86400;
+  if (interval > 1) {
+    const days = Math.floor(interval);
+    return days + (days === 1 ? " day ago" : " days ago");
+  }
+  interval = seconds / 3600;
+  if (interval > 1) {
+    const hours = Math.floor(interval);
+    return hours + (hours === 1 ? " hour ago" : " hours ago");
+  }
+  interval = seconds / 60;
+  if (interval > 1) {
+    const minutes = Math.floor(interval);
+    return minutes + (minutes === 1 ? " minute ago" : " minutes ago");
+  }
+  if (seconds < 10) {
+    return "just now";
+  }
+  return Math.floor(seconds) + " seconds ago";
+}
 
 const ReviewItem = ({ review }: { review: any }) => {
   const colorScheme = useColorScheme() ?? 'dark';
@@ -42,7 +77,9 @@ const VenueDetailsSheet = ({ venue, onDataNeedsRefresh }: { venue: any; onDataNe
 
 
   const addReviewSheetRef = useRef<BottomSheetModal>(null);
+  const addVibeCheckSheetRef = useRef<BottomSheetModal>(null);
   const snapPoints = useMemo(() => ['70%'], []);
+  const vibeSnapPoints = useMemo(() => ['60%'], []);
   
   const [reviews, setReviews] = useState<any[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(true);
@@ -76,9 +113,16 @@ const VenueDetailsSheet = ({ venue, onDataNeedsRefresh }: { venue: any; onDataNe
   }, [fetchReviews]);
 
   const handlePresentAddReview = () => addReviewSheetRef.current?.present();
+  const handlePresentAddVibe = () => addVibeCheckSheetRef.current?.present();
+  
   const handleReviewSubmitted = () => {
     addReviewSheetRef.current?.dismiss();
     fetchReviews(isShowingAllReviews ? null : 3); 
+    onDataNeedsRefresh();
+  };
+
+  const handleVibeSubmitted = () => {
+    addVibeCheckSheetRef.current?.dismiss();
     onDataNeedsRefresh();
   };
 
@@ -138,7 +182,7 @@ const VenueDetailsSheet = ({ venue, onDataNeedsRefresh }: { venue: any; onDataNe
             ({venue.review_count} {venue.review_count === 1 ? 'review' : 'reviews'})
           </Text>
         </View>
-
+        
         {venue.promotions?.length > 0 && (
           <View style={styles.promotionBadge}>
             <Ionicons name="star" size={16} color={colors.background} />
@@ -175,6 +219,11 @@ const VenueDetailsSheet = ({ venue, onDataNeedsRefresh }: { venue: any; onDataNe
           <Text style={styles.addReviewButtonText}>Add Your Review</Text>
         </TouchableOpacity>
 
+        <TouchableOpacity style={[styles.addReviewButton, {backgroundColor: colors.accent, marginTop: 12}]} onPress={handlePresentAddVibe}>
+          <Ionicons name="flame-outline" size={20} color={colors.background} />
+          <Text style={styles.addReviewButtonText}>Post a Vibe Check</Text>
+        </TouchableOpacity>
+        
         <View style={styles.separator} />
         
         <Text style={styles.sectionTitle}>Details</Text>
@@ -196,6 +245,34 @@ const VenueDetailsSheet = ({ venue, onDataNeedsRefresh }: { venue: any; onDataNe
           </View>
         )}
       </View>
+
+      {/* Vibe Check Section */}
+      {venue.latest_vibe ? (
+        <View style={styles.content}>
+          <View style={styles.separator} />
+          <Text style={styles.sectionTitle}>Live Vibe Check 🔥</Text>
+          <View style={styles.vibeCheckContainer}>
+            <View style={styles.vibeInfo}>
+              <Ionicons name="people" size={20} color={colors.tint} style={styles.infoIcon} />
+              <Text style={styles.infoText}>
+                Busyness: <Text style={{fontWeight: 'bold'}}>{['Quiet', 'Getting Busy', 'Just Right', 'Packed', 'Max Capacity'][venue.latest_vibe.busyness_rating - 1]}</Text>
+              </Text>
+            </View>
+            <Text style={styles.vibeQuote}>&quot;{venue.latest_vibe.comment}&quot;</Text>
+            <Text style={styles.vibeTime}>
+              - {venue.latest_vibe.user_name || 'Anonymous'}, {formatDistanceToNow(new Date(venue.latest_vibe.created_at))}
+            </Text>
+          </View>
+        </View>
+      ) : (
+        <View style={styles.content}>
+          <View style={styles.separator} />
+          <Text style={styles.sectionTitle}>Live Vibe Check</Text>
+          <View style={[styles.vibeCheckContainer, { borderLeftColor: colors.border }]}>
+             <Text style={styles.infoText}>No live vibe checks right now. Be the first to post one!</Text>
+          </View>
+        </View>
+      )}
     </ScrollView>
   );
 
@@ -210,6 +287,15 @@ const VenueDetailsSheet = ({ venue, onDataNeedsRefresh }: { venue: any; onDataNe
         handleIndicatorStyle={{ backgroundColor: colors.muted }}
       >
         <AddReviewSheet venueId={venue.id} onSubmitted={handleReviewSubmitted} />
+      </BottomSheetModal>
+      <BottomSheetModal
+        ref={addVibeCheckSheetRef}
+        index={0}
+        snapPoints={vibeSnapPoints}
+        backgroundStyle={{ backgroundColor: colors.surface }}
+        handleIndicatorStyle={{ backgroundColor: colors.muted }}
+      >
+        <AddVibeCheckSheet venueId={venue.id} onSubmitted={handleVibeSubmitted} />
       </BottomSheetModal>
     </>
   );
@@ -342,6 +428,31 @@ const getStyles = (colors: any) => StyleSheet.create({
     fontSize: 16,
     color: colors.text,
     lineHeight: 22,
+  },
+  vibeCheckContainer: {
+    backgroundColor: colors.surface,
+    padding: 16,
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.tint,
+  },
+  vibeInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  vibeQuote: {
+    fontStyle: 'italic',
+    color: colors.muted,
+    fontSize: 16,
+    marginTop: 12,
+    marginBottom: 8,
+    lineHeight: 22,
+  },
+  vibeTime: {
+    fontSize: 12,
+    color: colors.muted,
+    textAlign: 'right',
   },
   reviewItem: {
     backgroundColor: colors.surface,

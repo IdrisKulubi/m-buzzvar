@@ -52,6 +52,8 @@ For Google OAuth:
 - **messages**: Group chat messages
 - **club_views**: User interactions with venues (views, likes, bookmarks)
 - **user_bookmarks**: User saved venues
+- **vibe_checks**: Real-time venue atmosphere updates with busyness ratings, comments, and photos
+- **reviews**: User reviews and ratings for venues
 
 ### Key Features
 

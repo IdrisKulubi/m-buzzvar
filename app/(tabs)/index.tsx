@@ -345,31 +345,6 @@ export default function HomeScreen() {
             ))}
           </ScrollView>
         </View>
-        
-        {/* Your Groups */}
-        <View style={styles.sectionContainer}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Your Groups</Text>
-            <TouchableOpacity 
-              style={styles.seeAllButton}
-              onPress={() => router.push('/(tabs)/groups')}
-            >
-              <Text style={styles.seeAllText}>See All</Text>
-            </TouchableOpacity>
-          </View>
-          {dummyGroups.map((group) => (
-            <TouchableOpacity key={group.id} style={styles.groupCard}>
-              <View style={styles.groupIcon}>
-                <Ionicons name="people" size={24} color={colors.background} />
-              </View>
-              <View style={styles.groupInfo}>
-                <Text style={styles.groupName}>{group.name}</Text>
-                <Text style={styles.groupDetails}>{group.members} members • {group.venue}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={22} color={colors.muted} />
-            </TouchableOpacity>
-          ))}
-        </View>
 
         {/* Bookmarked Venues */}
         <View style={styles.sectionContainer}>
