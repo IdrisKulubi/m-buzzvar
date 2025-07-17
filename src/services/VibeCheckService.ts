@@ -1,13 +1,13 @@
-import * as Location from 'expo-location';
-import { supabase } from '../lib/supabase';
-import { 
-  VibeCheck, 
-  VibeCheckWithDetails, 
-  VibeCheckFormData, 
+import * as Location from "expo-location";
+import { supabase } from "../lib/supabase";
+import {
+  VibeCheck,
+  VibeCheckWithDetails,
+  VibeCheckFormData,
   Venue,
-  User 
-} from '../lib/types';
-import { LocationVerificationService } from './LocationVerificationService';
+  User,
+} from "../lib/types";
+import { LocationVerificationService } from "./LocationVerificationService";
 
 export class VibeCheckService {
   /**
@@ -22,49 +22,60 @@ export class VibeCheckService {
   ): Promise<{ data: VibeCheck | null; error: any }> {
     try {
       // Get current user
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
       if (userError || !user) {
-        return { data: null, error: 'User not authenticated' };
+        return { data: null, error: "User not authenticated" };
       }
 
       // Verify location against venue
       const { data: venue, error: venueError } = await supabase
-        .from('venues')
-        .select('*')
-        .eq('id', data.venue_id)
+        .from("venues")
+        .select("*")
+        .eq("id", data.venue_id)
         .single();
 
       if (venueError || !venue) {
-        return { data: null, error: 'Venue not found' };
+        return { data: null, error: "Venue not found" };
       }
 
-      const locationVerification = await LocationVerificationService.verifyUserAtVenue(
-        userLocation,
-        venue
-      );
+      const locationVerification =
+        await LocationVerificationService.verifyUserAtVenue(
+          userLocation,
+          venue
+        );
 
       if (!locationVerification.is_valid) {
-        return { 
-          data: null, 
-          error: `You must be within ${LocationVerificationService.MAX_DISTANCE_METERS}m of the venue to post a vibe check. You are ${locationVerification.distance_meters}m away.`
+        return {
+          data: null,
+          error: `You must be within ${LocationVerificationService.MAX_DISTANCE_METERS}m of the venue to post a vibe check. You are ${locationVerification.distance_meters}m away.`,
         };
       }
 
       // Check rate limiting (one vibe check per user per venue per hour)
       const canPost = await this.canUserPostVibeCheck(user.id, data.venue_id);
       if (!canPost) {
-        return { 
-          data: null, 
-          error: 'You can only post one vibe check per venue per hour. Please wait before posting again.'
+        return {
+          data: null,
+          error:
+            "You can only post one vibe check per venue per hour. Please wait before posting again.",
         };
       }
 
       // Upload photo if provided
       let photoUrl: string | null = null;
       if (data.photo) {
-        const photoResult = await this.uploadVibeCheckPhoto(data.photo, user.id);
+        const photoResult = await this.uploadVibeCheckPhoto(
+          data.photo,
+          user.id
+        );
         if (photoResult.error) {
-          return { data: null, error: `Photo upload failed: ${photoResult.error}` };
+          return {
+            data: null,
+            error: `Photo upload failed: ${photoResult.error}`,
+          };
         }
         photoUrl = photoResult.data;
       }
@@ -81,7 +92,7 @@ export class VibeCheckService {
       };
 
       const { data: vibeCheck, error: insertError } = await supabase
-        .from('vibe_checks')
+        .from("vibe_checks")
         .insert(vibeCheckData)
         .select()
         .single();
@@ -92,7 +103,11 @@ export class VibeCheckService {
 
       return { data: vibeCheck, error: null };
     } catch (error) {
-      return { data: null, error: 'Failed to create vibe check. Please try again.' };
+      console.error(error)
+      return {
+        data: null,
+        error: "Failed to create vibe check. Please try again.",
+      };
     }
   }
 
@@ -111,24 +126,32 @@ export class VibeCheckService {
       cutoffTime.setHours(cutoffTime.getHours() - hoursBack);
 
       const { data: vibeChecks, error } = await supabase
-        .from('vibe_checks')
-        .select(`
+        .from("vibe_checks")
+        .select(
+          `
           *,
           user:users(id, name, avatar_url),
           venue:venues(id, name, address)
-        `)
-        .eq('venue_id', venueId)
-        .gte('created_at', cutoffTime.toISOString())
-        .order('created_at', { ascending: false });
+        `
+        )
+        .eq("venue_id", venueId)
+        .gte("created_at", cutoffTime.toISOString())
+        .order("created_at", { ascending: false });
 
       if (error) {
         return { data: [], error: error.message };
       }
 
-      const vibeChecksWithDetails = vibeChecks.map(this.transformToVibeCheckWithDetails);
+      const vibeChecksWithDetails = vibeChecks.map(
+        this.transformToVibeCheckWithDetails
+      );
       return { data: vibeChecksWithDetails, error: null };
     } catch (error) {
-      return { data: [], error: 'Failed to fetch venue vibe checks. Please try again.' };
+      console.error(error)
+      return {
+        data: [],
+        error: "Failed to fetch venue vibe checks. Please try again.",
+      };
     }
   }
 
@@ -147,24 +170,31 @@ export class VibeCheckService {
       cutoffTime.setHours(cutoffTime.getHours() - hoursBack);
 
       const { data: vibeChecks, error } = await supabase
-        .from('vibe_checks')
-        .select(`
+        .from("vibe_checks")
+        .select(
+          `
           *,
           user:users(id, name, avatar_url),
           venue:venues(id, name, address)
-        `)
-        .gte('created_at', cutoffTime.toISOString())
-        .order('created_at', { ascending: false })
+        `
+        )
+        .gte("created_at", cutoffTime.toISOString())
+        .order("created_at", { ascending: false })
         .limit(limit);
 
       if (error) {
         return { data: [], error: error.message };
       }
 
-      const vibeChecksWithDetails = vibeChecks.map(this.transformToVibeCheckWithDetails);
+      const vibeChecksWithDetails = vibeChecks.map(
+        this.transformToVibeCheckWithDetails
+      );
       return { data: vibeChecksWithDetails, error: null };
     } catch (error) {
-      return { data: [], error: 'Failed to fetch live vibe checks. Please try again.' };
+      return {
+        data: [],
+        error: "Failed to fetch live vibe checks. Please try again.",
+      };
     }
   }
 
@@ -181,7 +211,7 @@ export class VibeCheckService {
     try {
       // Generate unique filename
       const timestamp = Date.now();
-      const fileExtension = photo.name.split('.').pop() || 'jpg';
+      const fileExtension = photo.name.split(".").pop() || "jpg";
       const fileName = `vibe-checks/${userId}/${timestamp}.${fileExtension}`;
 
       // Convert URI to blob for upload
@@ -190,10 +220,10 @@ export class VibeCheckService {
 
       // Upload to Supabase Storage
       const { data, error } = await supabase.storage
-        .from('photos')
+        .from("photos")
         .upload(fileName, blob, {
           contentType: photo.type,
-          upsert: false
+          upsert: false,
         });
 
       if (error) {
@@ -201,13 +231,13 @@ export class VibeCheckService {
       }
 
       // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('photos')
-        .getPublicUrl(fileName);
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("photos").getPublicUrl(fileName);
 
       return { data: publicUrl, error: null };
     } catch (error) {
-      return { data: null, error: 'Failed to upload photo. Please try again.' };
+      return { data: null, error: "Failed to upload photo. Please try again." };
     }
   }
 
@@ -226,16 +256,16 @@ export class VibeCheckService {
       oneHourAgo.setHours(oneHourAgo.getHours() - 1);
 
       const { data, error } = await supabase
-        .from('vibe_checks')
-        .select('id')
-        .eq('user_id', userId)
-        .eq('venue_id', venueId)
-        .gte('created_at', oneHourAgo.toISOString())
+        .from("vibe_checks")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("venue_id", venueId)
+        .gte("created_at", oneHourAgo.toISOString())
         .limit(1);
 
       if (error) {
         // If there's an error checking, allow the post (fail open)
-        console.warn('Error checking rate limit:', error);
+        console.warn("Error checking rate limit:", error);
         return true;
       }
 
@@ -243,7 +273,7 @@ export class VibeCheckService {
       return data.length === 0;
     } catch (error) {
       // If there's an error checking, allow the post (fail open)
-      console.warn('Error checking rate limit:', error);
+      console.warn("Error checking rate limit:", error);
       return true;
     }
   }
@@ -263,31 +293,37 @@ export class VibeCheckService {
       oneHourAgo.setHours(oneHourAgo.getHours() - 1);
 
       const { data: vibeCheck, error } = await supabase
-        .from('vibe_checks')
-        .select(`
+        .from("vibe_checks")
+        .select(
+          `
           *,
           user:users(id, name, avatar_url),
           venue:venues(id, name, address)
-        `)
-        .eq('user_id', userId)
-        .eq('venue_id', venueId)
-        .gte('created_at', oneHourAgo.toISOString())
-        .order('created_at', { ascending: false })
+        `
+        )
+        .eq("user_id", userId)
+        .eq("venue_id", venueId)
+        .gte("created_at", oneHourAgo.toISOString())
+        .order("created_at", { ascending: false })
         .limit(1)
         .single();
 
       if (error) {
-        if (error.code === 'PGRST116') {
+        if (error.code === "PGRST116") {
           // No rows returned
           return { data: null, error: null };
         }
         return { data: null, error: error.message };
       }
 
-      const vibeCheckWithDetails = this.transformToVibeCheckWithDetails(vibeCheck);
+      const vibeCheckWithDetails =
+        this.transformToVibeCheckWithDetails(vibeCheck);
       return { data: vibeCheckWithDetails, error: null };
     } catch (error) {
-      return { data: null, error: 'Failed to fetch user vibe check. Please try again.' };
+      return {
+        data: null,
+        error: "Failed to fetch user vibe check. Please try again.",
+      };
     }
   }
 
@@ -299,13 +335,15 @@ export class VibeCheckService {
    */
   static async updateVibeCheck(
     vibeCheckId: string,
-    updates: Partial<Pick<VibeCheck, 'busyness_rating' | 'comment' | 'photo_url'>>
+    updates: Partial<
+      Pick<VibeCheck, "busyness_rating" | "comment" | "photo_url">
+    >
   ): Promise<{ data: VibeCheck | null; error: any }> {
     try {
       const { data: vibeCheck, error } = await supabase
-        .from('vibe_checks')
+        .from("vibe_checks")
         .update(updates)
-        .eq('id', vibeCheckId)
+        .eq("id", vibeCheckId)
         .select()
         .single();
 
@@ -315,7 +353,10 @@ export class VibeCheckService {
 
       return { data: vibeCheck, error: null };
     } catch (error) {
-      return { data: null, error: 'Failed to update vibe check. Please try again.' };
+      return {
+        data: null,
+        error: "Failed to update vibe check. Please try again.",
+      };
     }
   }
 
@@ -329,9 +370,9 @@ export class VibeCheckService {
   ): Promise<{ success: boolean; error: any }> {
     try {
       const { error } = await supabase
-        .from('vibe_checks')
+        .from("vibe_checks")
         .delete()
-        .eq('id', vibeCheckId);
+        .eq("id", vibeCheckId);
 
       if (error) {
         return { success: false, error: error.message };
@@ -339,7 +380,10 @@ export class VibeCheckService {
 
       return { success: true, error: null };
     } catch (error) {
-      return { success: false, error: 'Failed to delete vibe check. Please try again.' };
+      return {
+        success: false,
+        error: "Failed to delete vibe check. Please try again.",
+      };
     }
   }
 
@@ -348,24 +392,29 @@ export class VibeCheckService {
    * @param rawData Raw data from database query
    * @returns Transformed VibeCheckWithDetails object
    */
-  private static transformToVibeCheckWithDetails(rawData: any): VibeCheckWithDetails {
+  private static transformToVibeCheckWithDetails(
+    rawData: any
+  ): VibeCheckWithDetails {
     const createdAt = new Date(rawData.created_at);
     const now = new Date();
-    const diffInMinutes = Math.floor((now.getTime() - createdAt.getTime()) / (1000 * 60));
-    const twoHoursAgo = new Date(now.getTime() - (2 * 60 * 60 * 1000));
+    const diffInMinutes = Math.floor(
+      (now.getTime() - createdAt.getTime()) / (1000 * 60)
+    );
+    const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
 
     // Generate human-readable time ago string
     let timeAgo: string;
     if (diffInMinutes < 1) {
-      timeAgo = 'Just now';
+      timeAgo = "Just now";
     } else if (diffInMinutes < 60) {
-      timeAgo = `${diffInMinutes} minute${diffInMinutes === 1 ? '' : 's'} ago`;
-    } else if (diffInMinutes < 1440) { // Less than 24 hours
+      timeAgo = `${diffInMinutes} minute${diffInMinutes === 1 ? "" : "s"} ago`;
+    } else if (diffInMinutes < 1440) {
+      // Less than 24 hours
       const hours = Math.floor(diffInMinutes / 60);
-      timeAgo = `${hours} hour${hours === 1 ? '' : 's'} ago`;
+      timeAgo = `${hours} hour${hours === 1 ? "" : "s"} ago`;
     } else {
       const days = Math.floor(diffInMinutes / 1440);
-      timeAgo = `${days} day${days === 1 ? '' : 's'} ago`;
+      timeAgo = `${days} day${days === 1 ? "" : "s"} ago`;
     }
 
     return {
@@ -380,12 +429,12 @@ export class VibeCheckService {
       created_at: rawData.created_at,
       user: {
         id: rawData.user.id,
-        name: rawData.user.name || 'Anonymous',
+        name: rawData.user.name || "Anonymous",
         avatar_url: rawData.user.avatar_url,
       },
       venue: {
         id: rawData.venue.id,
-        name: rawData.venue.name || 'Unknown Venue',
+        name: rawData.venue.name || "Unknown Venue",
         address: rawData.venue.address,
       },
       time_ago: timeAgo,
@@ -402,14 +451,14 @@ export class VibeCheckService {
   static async getVenueVibeStats(
     venueId: string,
     hoursBack: number = 4
-  ): Promise<{ 
-    data: { 
-      recent_count: number; 
-      average_busyness: number | null; 
+  ): Promise<{
+    data: {
+      recent_count: number;
+      average_busyness: number | null;
       has_live_activity: boolean;
       latest_vibe_check: VibeCheckWithDetails | null;
-    } | null; 
-    error: any 
+    } | null;
+    error: any;
   }> {
     try {
       const cutoffTime = new Date();
@@ -418,32 +467,37 @@ export class VibeCheckService {
       twoHoursAgo.setHours(twoHoursAgo.getHours() - 2);
 
       const { data: vibeChecks, error } = await supabase
-        .from('vibe_checks')
-        .select(`
+        .from("vibe_checks")
+        .select(
+          `
           *,
           user:users(id, name, avatar_url),
           venue:venues(id, name, address)
-        `)
-        .eq('venue_id', venueId)
-        .gte('created_at', cutoffTime.toISOString())
-        .order('created_at', { ascending: false });
+        `
+        )
+        .eq("venue_id", venueId)
+        .gte("created_at", cutoffTime.toISOString())
+        .order("created_at", { ascending: false });
 
       if (error) {
         return { data: null, error: error.message };
       }
 
       const recentCount = vibeChecks.length;
-      const averageBusyness = recentCount > 0 
-        ? vibeChecks.reduce((sum, vc) => sum + vc.busyness_rating, 0) / recentCount
-        : null;
-      
-      const hasLiveActivity = vibeChecks.some(vc => 
-        new Date(vc.created_at) > twoHoursAgo
+      const averageBusyness =
+        recentCount > 0
+          ? vibeChecks.reduce((sum, vc) => sum + vc.busyness_rating, 0) /
+            recentCount
+          : null;
+
+      const hasLiveActivity = vibeChecks.some(
+        (vc) => new Date(vc.created_at) > twoHoursAgo
       );
 
-      const latestVibeCheck = vibeChecks.length > 0 
-        ? this.transformToVibeCheckWithDetails(vibeChecks[0])
-        : null;
+      const latestVibeCheck =
+        vibeChecks.length > 0
+          ? this.transformToVibeCheckWithDetails(vibeChecks[0])
+          : null;
 
       return {
         data: {
@@ -452,10 +506,13 @@ export class VibeCheckService {
           has_live_activity: hasLiveActivity,
           latest_vibe_check: latestVibeCheck,
         },
-        error: null
+        error: null,
       };
     } catch (error) {
-      return { data: null, error: 'Failed to fetch venue vibe stats. Please try again.' };
+      return {
+        data: null,
+        error: "Failed to fetch venue vibe stats. Please try again.",
+      };
     }
   }
 }
