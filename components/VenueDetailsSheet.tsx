@@ -15,8 +15,12 @@ import { Colors } from '../constants/Colors';
 import StarRating from './StarRating';
 import { BottomSheetModal } from '@gorhom/bottom-sheet';
 import AddReviewSheet from './AddReviewSheet';
-import AddVibeCheckSheet from '../components/AddVibeCheckSheet';
+import VenueVibeSection from './VenueVibeSection';
+import VibeCheckForm from './VibeCheckForm';
 import { supabase } from '../src/lib/supabase';
+import { addVibeCheck } from '../src/actions/clubs';
+import { useAuth } from '../src/lib/hooks';
+import { VibeCheckRealtimeService } from '../src/services/VibeCheckRealtimeService';
 
 function formatDistanceToNow(date: Date): string {
   const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
@@ -74,7 +78,7 @@ const VenueDetailsSheet = ({ venue, onDataNeedsRefresh }: { venue: any; onDataNe
   const colorScheme = useColorScheme() ?? 'dark';
   const colors = Colors[colorScheme];
   const styles = useMemo(() => getStyles(colors), [colors]);
-
+  const { user } = useAuth();
 
   const addReviewSheetRef = useRef<BottomSheetModal>(null);
   const addVibeCheckSheetRef = useRef<BottomSheetModal>(null);
@@ -84,6 +88,7 @@ const VenueDetailsSheet = ({ venue, onDataNeedsRefresh }: { venue: any; onDataNe
   const [reviews, setReviews] = useState<any[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(true);
   const [isShowingAllReviews, setIsShowingAllReviews] = useState(false);
+  const [isSubmittingVibeCheck, setIsSubmittingVibeCheck] = useState(false);
 
   const fetchReviews = useCallback(async (limit: number | null = 3) => {
     setReviewsLoading(true);
@@ -110,7 +115,33 @@ const VenueDetailsSheet = ({ venue, onDataNeedsRefresh }: { venue: any; onDataNe
   useEffect(() => {
     // Fetch initial preview
     fetchReviews(3);
-  }, [fetchReviews]);
+
+    // Set up real-time subscription for venue vibe checks
+    const subscriptionId = `venue-details-${venue.id}`;
+    
+    VibeCheckRealtimeService.subscribeToVenue(
+      subscriptionId,
+      venue.id,
+      {
+        onVibeCheckInsert: (vibeCheck: any) => {
+          // When a new vibe check is posted for this venue, refresh the data
+          onDataNeedsRefresh();
+        },
+        onVibeCheckUpdate: (vibeCheck: any) => {
+          // When a vibe check is updated for this venue, refresh the data
+          onDataNeedsRefresh();
+        },
+        onError: (error: any) => {
+          console.error('Real-time subscription error:', error);
+        }
+      }
+    );
+
+    // Cleanup subscription on unmount
+    return () => {
+      VibeCheckRealtimeService.unsubscribe(subscriptionId);
+    };
+  }, [fetchReviews, venue.id, onDataNeedsRefresh]);
 
   const handlePresentAddReview = () => addReviewSheetRef.current?.present();
   const handlePresentAddVibe = () => addVibeCheckSheetRef.current?.present();
@@ -124,6 +155,35 @@ const VenueDetailsSheet = ({ venue, onDataNeedsRefresh }: { venue: any; onDataNe
   const handleVibeSubmitted = () => {
     addVibeCheckSheetRef.current?.dismiss();
     onDataNeedsRefresh();
+  };
+
+  const handleVibeCheckSubmit = async (data: any) => {
+    if (!user) {
+      console.error('User not authenticated');
+      return;
+    }
+
+    setIsSubmittingVibeCheck(true);
+    
+    try {
+      const result = await addVibeCheck({
+        venueId: venue.id,
+        userId: user.id,
+        busyness_rating: data.busyness_rating,
+        comment: data.comment,
+      });
+
+      if (result.error) {
+        console.error('Error submitting vibe check:', result.error);
+        // Handle error - could show toast or alert
+      } else {
+        handleVibeSubmitted();
+      }
+    } catch (error) {
+      console.error('Error submitting vibe check:', error);
+    } finally {
+      setIsSubmittingVibeCheck(false);
+    }
   };
 
   const handleViewAllReviews = () => {
@@ -247,32 +307,17 @@ const VenueDetailsSheet = ({ venue, onDataNeedsRefresh }: { venue: any; onDataNe
       </View>
 
       {/* Vibe Check Section */}
-      {venue.latest_vibe ? (
-        <View style={styles.content}>
-          <View style={styles.separator} />
-          <Text style={styles.sectionTitle}>Live Vibe Check 🔥</Text>
-          <View style={styles.vibeCheckContainer}>
-            <View style={styles.vibeInfo}>
-              <Ionicons name="people" size={20} color={colors.tint} style={styles.infoIcon} />
-              <Text style={styles.infoText}>
-                Busyness: <Text style={{fontWeight: 'bold'}}>{['Quiet', 'Getting Busy', 'Just Right', 'Packed', 'Max Capacity'][venue.latest_vibe.busyness_rating - 1]}</Text>
-              </Text>
-            </View>
-            <Text style={styles.vibeQuote}>&quot;{venue.latest_vibe.comment}&quot;</Text>
-            <Text style={styles.vibeTime}>
-              - {venue.latest_vibe.user_name || 'Anonymous'}, {formatDistanceToNow(new Date(venue.latest_vibe.created_at))}
-            </Text>
-          </View>
-        </View>
-      ) : (
-        <View style={styles.content}>
-          <View style={styles.separator} />
-          <Text style={styles.sectionTitle}>Live Vibe Check</Text>
-          <View style={[styles.vibeCheckContainer, { borderLeftColor: colors.border }]}>
-             <Text style={styles.infoText}>No live vibe checks right now. Be the first to post one!</Text>
-          </View>
-        </View>
-      )}
+      <View style={styles.content}>
+        <View style={styles.separator} />
+        <VenueVibeSection
+          venue={venue}
+          onPostVibeCheck={handlePresentAddVibe}
+          onVibeCheckPress={(vibeCheck) => {
+            // Handle vibe check press - could navigate to user profile or show details
+            console.log('Vibe check pressed:', vibeCheck);
+          }}
+        />
+      </View>
     </ScrollView>
   );
 
@@ -295,7 +340,12 @@ const VenueDetailsSheet = ({ venue, onDataNeedsRefresh }: { venue: any; onDataNe
         backgroundStyle={{ backgroundColor: colors.surface }}
         handleIndicatorStyle={{ backgroundColor: colors.muted }}
       >
-        <AddVibeCheckSheet venueId={venue.id} onSubmitted={handleVibeSubmitted} />
+        <VibeCheckForm
+          venue={venue}
+          onSubmit={handleVibeCheckSubmit}
+          onCancel={() => addVibeCheckSheetRef.current?.dismiss()}
+          isSubmitting={isSubmittingVibeCheck}
+        />
       </BottomSheetModal>
     </>
   );

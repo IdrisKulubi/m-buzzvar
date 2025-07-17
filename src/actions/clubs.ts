@@ -21,6 +21,10 @@ export interface VenueWithDistance extends Venue {
   menus?: Menu[]
   promotions?: Promotion[]
   isBookmarked?: boolean
+  recent_vibe_count?: number
+  average_recent_busyness?: number | null
+  has_live_activity?: boolean
+  latest_vibe_check?: any
 }
 
 export interface Menu {
@@ -143,6 +147,40 @@ export async function getVenueById(venueId: string, userId?: string) {
 
     if (promotionsError) throw promotionsError
 
+    // Fetch vibe check summary (last 4 hours)
+    const fourHoursAgo = new Date();
+    fourHoursAgo.setHours(fourHoursAgo.getHours() - 4);
+    
+    const { data: vibeChecks, error: vibeChecksError } = await supabase
+      .from('vibe_checks')
+      .select(`
+        *,
+        users(id, name, avatar_url)
+      `)
+      .eq('venue_id', venueId)
+      .gte('created_at', fourHoursAgo.toISOString())
+      .order('created_at', { ascending: false });
+
+    if (vibeChecksError) {
+      console.warn('Error fetching vibe checks:', vibeChecksError);
+    }
+
+    // Calculate vibe check summary
+    const recentVibeChecks = vibeChecks || [];
+    const twoHoursAgo = new Date();
+    twoHoursAgo.setHours(twoHoursAgo.getHours() - 2);
+    
+    const recentVibeCount = recentVibeChecks.length;
+    const averageRecentBusyness = recentVibeCount > 0 
+      ? recentVibeChecks.reduce((sum, vc) => sum + vc.busyness_rating, 0) / recentVibeCount
+      : null;
+    
+    const hasLiveActivity = recentVibeChecks.some(
+      vc => new Date(vc.created_at) > twoHoursAgo
+    );
+    
+    const latestVibeCheck = recentVibeChecks.length > 0 ? recentVibeChecks[0] : null;
+
     // Check if bookmarked by user
     let isBookmarked = false
     if (userId) {
@@ -161,6 +199,11 @@ export async function getVenueById(venueId: string, userId?: string) {
       menus: menus || [],
       promotions: promotions || [],
       isBookmarked,
+      // Add vibe check summary
+      recent_vibe_count: recentVibeCount,
+      average_recent_busyness: averageRecentBusyness,
+      has_live_activity: hasLiveActivity,
+      latest_vibe_check: latestVibeCheck,
     }
 
     // Record the view
@@ -368,4 +411,110 @@ export async function addReview({
   }
 
   return { data, error };
+}
+
+export async function addVibeCheck({
+  venueId,
+  userId,
+  busyness_rating,
+  comment,
+}: {
+  venueId: string;
+  userId: string;
+  busyness_rating: number;
+  comment?: string;
+}) {
+  if (busyness_rating < 1 || busyness_rating > 5) {
+    return { data: null, error: { message: 'Busyness rating must be between 1 and 5.' } };
+  }
+
+  try {
+    // Get user's current location for verification
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      return { data: null, error: { message: 'Location permission is required to post vibe checks.' } };
+    }
+
+    const location = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.High,
+    });
+
+    // Get venue details for location verification
+    const { data: venue, error: venueError } = await supabase
+      .from('venues')
+      .select('*')
+      .eq('id', venueId)
+      .single();
+
+    if (venueError || !venue) {
+      return { data: null, error: { message: 'Venue not found.' } };
+    }
+
+    // Verify user is within 100m of venue
+    if (venue.latitude && venue.longitude) {
+      const distance = calculateDistance(
+        location.coords.latitude,
+        location.coords.longitude,
+        venue.latitude,
+        venue.longitude
+      );
+
+      // Convert km to meters
+      const distanceInMeters = distance * 1000;
+      
+      if (distanceInMeters > 100) {
+        return { 
+          data: null, 
+          error: { 
+            message: `You must be within 100m of the venue to post a vibe check. You are ${Math.round(distanceInMeters)}m away.` 
+          } 
+        };
+      }
+    }
+
+    // Check if user has already posted a vibe check for this venue in the last hour
+    const oneHourAgo = new Date();
+    oneHourAgo.setHours(oneHourAgo.getHours() - 1);
+
+    const { data: existingVibeCheck } = await supabase
+      .from('vibe_checks')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('venue_id', venueId)
+      .gte('created_at', oneHourAgo.toISOString())
+      .single();
+
+    if (existingVibeCheck) {
+      return { 
+        data: null, 
+        error: { 
+          message: 'You can only post one vibe check per venue per hour. Please wait before posting again.' 
+        } 
+      };
+    }
+
+    // Insert the vibe check
+    const { data, error } = await supabase
+      .from('vibe_checks')
+      .insert({
+        venue_id: venueId,
+        user_id: userId,
+        busyness_rating: busyness_rating,
+        comment: comment?.trim() || null,
+        user_latitude: location.coords.latitude,
+        user_longitude: location.coords.longitude,
+      })
+      .select()
+      .single();
+      
+    if (error) {
+      console.error('Error adding vibe check:', error);
+      return { data: null, error: { message: 'Failed to post vibe check. Please try again.' } };
+    }
+
+    return { data, error: null };
+  } catch (error) {
+    console.error('Error in addVibeCheck:', error);
+    return { data: null, error: { message: 'Failed to post vibe check. Please try again.' } };
+  }
 } 

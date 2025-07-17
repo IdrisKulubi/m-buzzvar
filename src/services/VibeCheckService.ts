@@ -8,6 +8,7 @@ import {
   User,
 } from "../lib/types";
 import { LocationVerificationService } from "./LocationVerificationService";
+import { PhotoUploadService, PhotoUploadProgress } from "./PhotoUploadService";
 
 export class VibeCheckService {
   /**
@@ -199,45 +200,32 @@ export class VibeCheckService {
   }
 
   /**
-   * Upload a photo for a vibe check
+   * Upload a photo for a vibe check with compression and progress tracking
    * @param photo Photo data from form
    * @param userId User ID for file naming
+   * @param onProgress Optional progress callback
    * @returns Promise with photo URL or error
    */
   static async uploadVibeCheckPhoto(
     photo: { uri: string; type: string; name: string },
-    userId: string
+    userId: string,
+    onProgress?: (progress: PhotoUploadProgress) => void
   ): Promise<{ data: string | null; error: any }> {
     try {
-      // Generate unique filename
-      const timestamp = Date.now();
-      const fileExtension = photo.name.split(".").pop() || "jpg";
-      const fileName = `vibe-checks/${userId}/${timestamp}.${fileExtension}`;
+      const result = await PhotoUploadService.uploadPhoto(photo, userId, {
+        quality: 0.8,
+        maxWidth: 1200,
+        maxHeight: 1200,
+        onProgress,
+      });
 
-      // Convert URI to blob for upload
-      const response = await fetch(photo.uri);
-      const blob = await response.blob();
-
-      // Upload to Supabase Storage
-      const { data, error } = await supabase.storage
-        .from("photos")
-        .upload(fileName, blob, {
-          contentType: photo.type,
-          upsert: false,
-        });
-
-      if (error) {
-        return { data: null, error: error.message };
-      }
-
-      // Get public URL
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("photos").getPublicUrl(fileName);
-
-      return { data: publicUrl, error: null };
+      return result;
     } catch (error) {
-      return { data: null, error: "Failed to upload photo. Please try again." };
+      console.error('Photo upload error:', error);
+      return { 
+        data: null, 
+        error: error instanceof Error ? error.message : "Failed to upload photo. Please try again." 
+      };
     }
   }
 

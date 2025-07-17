@@ -58,3 +58,17 @@ export const BUSYNESS_LABELS = {
 } as const;
 
 export type BusynessRating = keyof typeof BUSYNESS_LABELS;
+
+// Real-time subscription types
+export interface RealtimeVibeCheckEvent {
+  type: 'INSERT' | 'UPDATE' | 'DELETE';
+  vibeCheck?: VibeCheckWithDetails;
+  vibeCheckId?: string;
+}
+
+export interface RealtimeSubscriptionCallbacks {
+  onVibeCheckInsert?: (vibeCheck: VibeCheckWithDetails) => void;
+  onVibeCheckUpdate?: (vibeCheck: VibeCheckWithDetails) => void;
+  onVibeCheckDelete?: (vibeCheckId: string) => void;
+  onError?: (error: any) => void;
+}
