@@ -2,6 +2,7 @@ import { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { VibeCheckWithDetails } from '../lib/types';
 import { VibeCheckService } from './VibeCheckService';
+import { OptimizedRealtimeService } from './OptimizedRealtimeService';
 
 export interface RealtimeSubscriptionOptions {
   venueId?: string;
@@ -15,6 +16,13 @@ export class VibeCheckRealtimeService {
   private static subscriptions = new Map<string, RealtimeChannel>();
 
   /**
+   * Initialize the optimized real-time service
+   */
+  static initialize(): void {
+    OptimizedRealtimeService.initialize();
+  }
+
+  /**
    * Clear all subscriptions (for testing purposes)
    * @internal
    */
@@ -23,7 +31,7 @@ export class VibeCheckRealtimeService {
   }
 
   /**
-   * Subscribe to real-time vibe check updates
+   * Subscribe to real-time vibe check updates using optimized service
    * @param subscriptionId Unique identifier for this subscription
    * @param options Subscription configuration options
    * @returns Promise with subscription result
@@ -32,124 +40,60 @@ export class VibeCheckRealtimeService {
     subscriptionId: string,
     options: RealtimeSubscriptionOptions
   ): Promise<{ success: boolean; error?: string }> {
-    try {
-      // Remove existing subscription if it exists
-      await this.unsubscribe(subscriptionId);
-
-      // Create channel name based on venue filter
-      const channelName = options.venueId 
-        ? `vibe-checks-venue-${options.venueId}`
-        : 'vibe-checks-all';
-
-      // Create new channel
-      const channel = supabase.channel(channelName);
-
-      // Configure subscription filter
-      let subscription = channel.on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'vibe_checks',
-          ...(options.venueId && { filter: `venue_id=eq.${options.venueId}` })
-        },
-        async (payload) => {
-          try {
-            await this.handleRealtimeEvent(payload, options);
-          } catch (error) {
-            console.error('Error handling realtime event:', error);
-            options.onError?.(error);
-          }
-        }
-      );
-
-      // Subscribe to the channel
-      const subscribeResult = await channel.subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log(`Successfully subscribed to ${channelName}`);
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error(`Error subscribing to ${channelName}`);
-          options.onError?.('Failed to establish real-time connection');
-        }
-      });
-
-      // Store the subscription
-      this.subscriptions.set(subscriptionId, channel);
-
-      return { success: true };
-    } catch (error) {
-      console.error('Error creating subscription:', error);
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Failed to create subscription' 
-      };
-    }
+    // Use optimized real-time service with batching and connection pooling
+    return await OptimizedRealtimeService.subscribe(subscriptionId, {
+      venueId: options.venueId,
+      batchUpdates: true,
+      batchDelay: 300, // 300ms batch delay for better performance
+      maxRetries: 3,
+      onVibeCheckInsert: options.onVibeCheckInsert,
+      onVibeCheckUpdate: options.onVibeCheckUpdate,
+      onVibeCheckDelete: options.onVibeCheckDelete,
+      onError: options.onError,
+    });
   }
 
   /**
-   * Unsubscribe from real-time updates
+   * Unsubscribe from real-time updates using optimized service
    * @param subscriptionId Unique identifier for the subscription to remove
    * @returns Promise with unsubscribe result
    */
   static async unsubscribe(subscriptionId: string): Promise<{ success: boolean; error?: string }> {
-    try {
-      const channel = this.subscriptions.get(subscriptionId);
-      if (channel) {
-        await supabase.removeChannel(channel);
-        this.subscriptions.delete(subscriptionId);
-        console.log(`Unsubscribed from ${subscriptionId}`);
-      }
-      return { success: true };
-    } catch (error) {
-      console.error('Error unsubscribing:', error);
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Failed to unsubscribe' 
-      };
-    }
+    return await OptimizedRealtimeService.unsubscribe(subscriptionId);
   }
 
   /**
-   * Unsubscribe from all active subscriptions
+   * Unsubscribe from all active subscriptions using optimized service
    * @returns Promise with cleanup result
    */
   static async unsubscribeAll(): Promise<{ success: boolean; error?: string }> {
-    try {
-      const subscriptionIds = Array.from(this.subscriptions.keys());
-      
-      for (const subscriptionId of subscriptionIds) {
-        const result = await this.unsubscribe(subscriptionId);
-        if (!result.success) {
-          return { success: false, error: result.error };
-        }
-      }
-
-      console.log('Unsubscribed from all real-time subscriptions');
-      return { success: true };
-    } catch (error) {
-      console.error('Error unsubscribing from all:', error);
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Failed to unsubscribe from all' 
-      };
-    }
+    return await OptimizedRealtimeService.unsubscribeAll();
   }
 
   /**
-   * Get list of active subscription IDs
+   * Get list of active subscription IDs from optimized service
    * @returns Array of active subscription identifiers
    */
   static getActiveSubscriptions(): string[] {
-    return Array.from(this.subscriptions.keys());
+    const stats = OptimizedRealtimeService.getSubscriptionStats();
+    return stats.subscriptionDetails.map(detail => detail.id);
   }
 
   /**
-   * Check if a subscription is active
+   * Check if a subscription is active using optimized service
    * @param subscriptionId Subscription identifier to check
    * @returns Boolean indicating if subscription is active
    */
   static isSubscribed(subscriptionId: string): boolean {
-    return this.subscriptions.has(subscriptionId);
+    const activeSubscriptions = this.getActiveSubscriptions();
+    return activeSubscriptions.includes(subscriptionId);
+  }
+
+  /**
+   * Get subscription statistics from optimized service
+   */
+  static getSubscriptionStats() {
+    return OptimizedRealtimeService.getSubscriptionStats();
   }
 
   /**

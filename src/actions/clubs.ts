@@ -67,7 +67,7 @@ function calculateDistance(
   return R * c
 }
 
-// Fetch all venues with optional location-based sorting
+// Fetch all venues with optional location-based sorting and vibe check data
 export async function getVenues(userLocation?: Location.LocationObject) {
   try {
     const { data: venues, error } = await supabase
@@ -79,39 +79,56 @@ export async function getVenues(userLocation?: Location.LocationObject) {
 
     if (!venues) return { data: [], error: null }
 
-    // Add distance calculation if user location is provided
-    const venuesWithDistance: VenueWithDistance[] = venues.map((venue) => {
-      let distance: number | undefined
+    // Fetch vibe check data for all venues
+    const venuesWithVibeData = await Promise.all(
+      venues.map(async (venue) => {
+        let distance: number | undefined
 
-      if (
-        userLocation &&
-        venue.latitude &&
-        venue.longitude
-      ) {
-        distance = calculateDistance(
-          userLocation.coords.latitude,
-          userLocation.coords.longitude,
-          venue.latitude,
+        if (
+          userLocation &&
+          venue.latitude &&
           venue.longitude
-        )
-      }
+        ) {
+          distance = calculateDistance(
+            userLocation.coords.latitude,
+            userLocation.coords.longitude,
+            venue.latitude,
+            venue.longitude
+          )
+        }
 
-      return {
-        ...venue,
-        distance,
-      }
-    })
+        // Get vibe check summary for this venue
+        const vibeStats = await getVenueVibeStats(venue.id)
 
-    // Sort by distance if available
-    if (userLocation) {
-      venuesWithDistance.sort((a, b) => {
+        return {
+          ...venue,
+          distance,
+          recent_vibe_count: vibeStats.recent_count,
+          average_recent_busyness: vibeStats.average_busyness,
+          has_live_activity: vibeStats.has_live_activity,
+          latest_vibe_check: vibeStats.latest_vibe_check,
+        }
+      })
+    )
+
+    // Sort by live activity first, then by distance if available
+    venuesWithVibeData.sort((a, b) => {
+      // Prioritize venues with live activity
+      if (a.has_live_activity && !b.has_live_activity) return -1
+      if (!a.has_live_activity && b.has_live_activity) return 1
+      
+      // Then sort by distance if available
+      if (userLocation) {
         if (a.distance === undefined) return 1
         if (b.distance === undefined) return -1
         return a.distance - b.distance
-      })
-    }
+      }
+      
+      // Finally sort by creation date
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    })
 
-    return { data: venuesWithDistance, error: null }
+    return { data: venuesWithVibeData, error: null }
   } catch (error) {
     return { data: [], error }
   }
@@ -411,6 +428,63 @@ export async function addReview({
   }
 
   return { data, error };
+}
+
+// Get venue vibe check statistics
+async function getVenueVibeStats(venueId: string) {
+  try {
+    const fourHoursAgo = new Date();
+    fourHoursAgo.setHours(fourHoursAgo.getHours() - 4);
+    const twoHoursAgo = new Date();
+    twoHoursAgo.setHours(twoHoursAgo.getHours() - 2);
+
+    const { data: vibeChecks, error } = await supabase
+      .from('vibe_checks')
+      .select(`
+        *,
+        users(id, name, avatar_url)
+      `)
+      .eq('venue_id', venueId)
+      .gte('created_at', fourHoursAgo.toISOString())
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.warn('Error fetching vibe checks for venue stats:', error);
+      return {
+        recent_count: 0,
+        average_busyness: null,
+        has_live_activity: false,
+        latest_vibe_check: null,
+      };
+    }
+
+    const recentVibeChecks = vibeChecks || [];
+    const recentCount = recentVibeChecks.length;
+    const averageBusyness = recentCount > 0 
+      ? recentVibeChecks.reduce((sum, vc) => sum + vc.busyness_rating, 0) / recentCount
+      : null;
+    
+    const hasLiveActivity = recentVibeChecks.some(
+      vc => new Date(vc.created_at) > twoHoursAgo
+    );
+    
+    const latestVibeCheck = recentVibeChecks.length > 0 ? recentVibeChecks[0] : null;
+
+    return {
+      recent_count: recentCount,
+      average_busyness: averageBusyness,
+      has_live_activity: hasLiveActivity,
+      latest_vibe_check: latestVibeCheck,
+    };
+  } catch (error) {
+    console.warn('Error in getVenueVibeStats:', error);
+    return {
+      recent_count: 0,
+      average_busyness: null,
+      has_live_activity: false,
+      latest_vibe_check: null,
+    };
+  }
 }
 
 export async function addVibeCheck({

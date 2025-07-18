@@ -1,16 +1,18 @@
 import * as Location from 'expo-location';
 import { LocationVerification, Venue } from '../lib/types';
+import { ErrorFactory, AppError, RetryManager } from '../lib/errors';
+import { ConnectivityManager } from '../lib/connectivity';
 
 export class LocationVerificationService {
   static readonly MAX_DISTANCE_METERS = 100;
 
   /**
-   * Request location permissions from the user
-   * @returns Promise with permission status and error handling
+   * Request location permissions from the user with comprehensive error handling
+   * @returns Promise with permission status and structured error
    */
   static async requestLocationPermission(): Promise<{
     granted: boolean;
-    error?: string;
+    error?: AppError;
   }> {
     try {
       // Check if location services are enabled
@@ -18,7 +20,7 @@ export class LocationVerificationService {
       if (!serviceEnabled) {
         return {
           granted: false,
-          error: 'Location services are disabled. Please enable location services in your device settings.',
+          error: ErrorFactory.locationServicesDisabled(),
         };
       }
 
@@ -28,44 +30,64 @@ export class LocationVerificationService {
       if (status !== 'granted') {
         return {
           granted: false,
-          error: 'Location permission denied. Please allow location access to post vibe checks.',
+          error: ErrorFactory.locationPermissionDenied(),
         };
       }
 
       return { granted: true };
     } catch (error) {
+      console.error('Location permission request failed:', error);
       return {
         granted: false,
-        error: 'Failed to request location permission. Please try again.',
+        error: ErrorFactory.unknownError(error),
       };
     }
   }
 
   /**
-   * Get the user's current location
-   * @returns Promise with location data or error
+   * Get the user's current location with retry mechanism and comprehensive error handling
+   * @returns Promise with location data or structured error
    */
   static async getCurrentLocation(): Promise<{
     location?: Location.LocationObject;
-    error?: string;
+    error?: AppError;
   }> {
-    try {
+    const operation = async () => {
       const permissionResult = await this.requestLocationPermission();
       if (!permissionResult.granted) {
-        return { error: permissionResult.error };
+        throw permissionResult.error;
       }
 
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-        timeInterval: 5000,
-        distanceInterval: 1,
-      });
+      try {
+        const location = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.High,
+          timeInterval: 10000, // 10 second timeout
+          distanceInterval: 1,
+        });
 
+        return location;
+      } catch (locationError: any) {
+        // Handle specific location errors
+        if (locationError.code === 'E_LOCATION_TIMEOUT') {
+          throw ErrorFactory.locationUnavailable();
+        }
+        if (locationError.code === 'E_LOCATION_UNAVAILABLE') {
+          throw ErrorFactory.locationUnavailable();
+        }
+        throw ErrorFactory.locationUnavailable();
+      }
+    };
+
+    try {
+      const location = await RetryManager.executeWithRetry(
+        operation,
+        ErrorFactory.locationUnavailable(),
+        'getCurrentLocation'
+      );
       return { location };
     } catch (error) {
-      return {
-        error: 'Failed to get current location. Please check your GPS signal and try again.',
-      };
+      console.error('Failed to get current location:', error);
+      return { error: error as AppError };
     }
   }
 
@@ -131,13 +153,13 @@ export class LocationVerificationService {
   }
 
   /**
-   * Verify user location against a venue with full error handling
+   * Verify user location against a venue with comprehensive error handling
    * @param venue Venue to verify against
-   * @returns Promise with verification result and any errors
+   * @returns Promise with verification result and structured errors
    */
   static async verifyLocationForVenue(venue: Venue): Promise<{
     verification?: LocationVerification;
-    error?: string;
+    error?: AppError;
   }> {
     try {
       const locationResult = await this.getCurrentLocation();
@@ -150,10 +172,21 @@ export class LocationVerificationService {
         venue
       );
 
+      // Check if user is too far from venue
+      if (!verification.is_valid && verification.distance_meters !== Infinity) {
+        return {
+          error: ErrorFactory.locationTooFar(
+            verification.distance_meters,
+            this.MAX_DISTANCE_METERS
+          )
+        };
+      }
+
       return { verification };
     } catch (error) {
+      console.error('Location verification failed:', error);
       return {
-        error: 'Failed to verify location. Please try again.',
+        error: ErrorFactory.unknownError(error),
       };
     }
   }

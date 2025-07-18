@@ -16,6 +16,7 @@ import { Colors } from '@/constants/Colors'
 import { useAuth } from '@/src/lib/hooks'
 import { getUserProfile } from '@/src/actions/auth'
 import { getVenues, getUserBookmarks, VenueWithDistance } from '@/src/actions/clubs'
+import LiveIndicator from '@/components/LiveIndicator'
 import { Ionicons } from '@expo/vector-icons'
 import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '@/src/lib/supabase'
@@ -67,12 +68,8 @@ export default function HomeScreen() {
     try {
       const [profileResult, venuesResult, bookmarksResult] = await Promise.all([
         getUserProfile(user.id),
-        // Fetch venues with promotions for the featured section
-        supabase
-          .from('venues_with_ratings')
-          .select('*, promotions(*)')
-          .order('created_at', { ascending: false })
-          .limit(10),
+        // Use the updated getVenues function that includes vibe check data
+        getVenues(),
         // Fetch bookmarked venues with their details and promotions
         supabase
           .from('user_bookmarks')
@@ -88,8 +85,25 @@ export default function HomeScreen() {
         console.error('Error fetching venues:', venuesResult.error)
       } else {
         const allVenues = venuesResult.data as VenueWithDistance[]
-        const featured = allVenues.filter(v => v.promotions && v.promotions.length > 0)
-        setFeaturedVenues(featured.length > 0 ? featured : allVenues.slice(0, 5))
+        
+        // Fetch promotions for each venue
+        const venuesWithPromotions = await Promise.all(
+          allVenues.map(async (venue) => {
+            const { data: promotions } = await supabase
+              .from('promotions')
+              .select('*')
+              .eq('venue_id', venue.id)
+              .eq('is_active', true);
+            
+            return {
+              ...venue,
+              promotions: promotions || [],
+            };
+          })
+        );
+        
+        const featured = venuesWithPromotions.filter(v => v.promotions && v.promotions.length > 0)
+        setFeaturedVenues(featured.length > 0 ? featured : venuesWithPromotions.slice(0, 5))
       }
       
       if (bookmarksResult.error) {
@@ -227,6 +241,12 @@ export default function HomeScreen() {
       fontSize: 12,
       fontWeight: 'bold',
     },
+    liveIndicatorContainer: {
+      position: 'absolute',
+      top: 12,
+      right: 12,
+      zIndex: 1,
+    },
     groupCard: {
       backgroundColor: colors.surface,
       borderRadius: 12,
@@ -335,6 +355,17 @@ export default function HomeScreen() {
                   <View style={styles.promotionBadge}>
                     <Ionicons name="star" size={12} color={colors.background} />
                     <Text style={styles.promotionText}>Promotion</Text>
+                  </View>
+                )}
+                {/* Live indicator positioned in top right */}
+                {(venue.has_live_activity || venue.recent_vibe_count > 0) && (
+                  <View style={styles.liveIndicatorContainer}>
+                    <LiveIndicator
+                      hasLiveActivity={venue.has_live_activity}
+                      averageBusyness={venue.average_recent_busyness}
+                      recentVibeCount={venue.recent_vibe_count}
+                      size="small"
+                    />
                   </View>
                 )}
                 <View style={styles.featuredContent}>

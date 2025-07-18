@@ -16,9 +16,8 @@ import StarRating from './StarRating';
 import { BottomSheetModal } from '@gorhom/bottom-sheet';
 import AddReviewSheet from './AddReviewSheet';
 import VenueVibeSection from './VenueVibeSection';
-import VibeCheckForm from './VibeCheckForm';
+import VibeCheckPostingFlow from './VibeCheckPostingFlow';
 import { supabase } from '../src/lib/supabase';
-import { addVibeCheck } from '../src/actions/clubs';
 import { useAuth } from '../src/lib/hooks';
 import { VibeCheckRealtimeService } from '../src/services/VibeCheckRealtimeService';
 
@@ -88,7 +87,6 @@ const VenueDetailsSheet = ({ venue, onDataNeedsRefresh }: { venue: any; onDataNe
   const [reviews, setReviews] = useState<any[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(true);
   const [isShowingAllReviews, setIsShowingAllReviews] = useState(false);
-  const [isSubmittingVibeCheck, setIsSubmittingVibeCheck] = useState(false);
 
   const fetchReviews = useCallback(async (limit: number | null = 3) => {
     setReviewsLoading(true);
@@ -155,35 +153,6 @@ const VenueDetailsSheet = ({ venue, onDataNeedsRefresh }: { venue: any; onDataNe
   const handleVibeSubmitted = () => {
     addVibeCheckSheetRef.current?.dismiss();
     onDataNeedsRefresh();
-  };
-
-  const handleVibeCheckSubmit = async (data: any) => {
-    if (!user) {
-      console.error('User not authenticated');
-      return;
-    }
-
-    setIsSubmittingVibeCheck(true);
-    
-    try {
-      const result = await addVibeCheck({
-        venueId: venue.id,
-        userId: user.id,
-        busyness_rating: data.busyness_rating,
-        comment: data.comment,
-      });
-
-      if (result.error) {
-        console.error('Error submitting vibe check:', result.error);
-        // Handle error - could show toast or alert
-      } else {
-        handleVibeSubmitted();
-      }
-    } catch (error) {
-      console.error('Error submitting vibe check:', error);
-    } finally {
-      setIsSubmittingVibeCheck(false);
-    }
   };
 
   const handleViewAllReviews = () => {
@@ -340,12 +309,14 @@ const VenueDetailsSheet = ({ venue, onDataNeedsRefresh }: { venue: any; onDataNe
         backgroundStyle={{ backgroundColor: colors.surface }}
         handleIndicatorStyle={{ backgroundColor: colors.muted }}
       >
-        <VibeCheckForm
-          venue={venue}
-          onSubmit={handleVibeCheckSubmit}
-          onCancel={() => addVibeCheckSheetRef.current?.dismiss()}
-          isSubmitting={isSubmittingVibeCheck}
-        />
+        {user && (
+          <VibeCheckPostingFlow
+            venue={venue}
+            onSuccess={handleVibeSubmitted}
+            onCancel={() => addVibeCheckSheetRef.current?.dismiss()}
+            userId={user.id}
+          />
+        )}
       </BottomSheetModal>
     </>
   );

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   StyleSheet,
@@ -22,6 +22,10 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { PhotoUploadProgress } from "@/src/services/PhotoUploadService";
+import { AppError, ErrorType, RateLimitManager } from "@/src/lib/errors";
+import ErrorDisplay from "./ErrorDisplay";
+import { RateLimitCountdown } from "./CountdownTimer";
+import { VibeCheckValidator, ValidationResult } from "@/src/lib/vibeCheckValidation";
 
 interface VibeCheckFormProps {
   venue: Venue;
@@ -30,6 +34,12 @@ interface VibeCheckFormProps {
   isSubmitting: boolean;
   locationVerified?: boolean;
   distanceToVenue?: number;
+  error?: AppError | null;
+  onRetry?: () => void;
+  rateLimitInfo?: {
+    canPost: boolean;
+    timeUntilReset?: number;
+  };
 }
 
 const VibeCheckForm: React.FC<VibeCheckFormProps> = ({
@@ -39,6 +49,9 @@ const VibeCheckForm: React.FC<VibeCheckFormProps> = ({
   isSubmitting,
   locationVerified = false,
   distanceToVenue,
+  error,
+  onRetry,
+  rateLimitInfo,
 }) => {
   const [busynessRating, setBusynessRating] = useState<BusynessRating>(3);
   const [comment, setComment] = useState("");
@@ -50,8 +63,70 @@ const VibeCheckForm: React.FC<VibeCheckFormProps> = ({
   const [uploadProgress, setUploadProgress] =
     useState<PhotoUploadProgress | null>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [localError, setLocalError] = useState<AppError | null>(null);
+  const [isRetrying, setIsRetrying] = useState(false);
+  const [validationResult, setValidationResult] = useState<ValidationResult>({ isValid: true, errors: [] });
+
+  // Validate form data whenever inputs change
+  useEffect(() => {
+    const formData: VibeCheckFormData = {
+      venue_id: venue.id,
+      busyness_rating: busynessRating,
+      comment: comment.trim() || undefined,
+      photo: photo || undefined,
+    };
+
+    const locationVerification = locationVerified ? {
+      is_valid: true,
+      distance_meters: distanceToVenue || 0,
+      venue_name: venue.name,
+    } : undefined;
+
+    const validation = VibeCheckValidator.validateVibeCheckForm(formData, locationVerification);
+    setValidationResult(validation);
+  }, [venue.id, venue.name, busynessRating, comment, photo, locationVerified, distanceToVenue]);
 
   const handleSubmit = async () => {
+    // Clear any previous local errors
+    setLocalError(null);
+
+    // Comprehensive validation before submission
+    const formData: VibeCheckFormData = {
+      venue_id: venue.id,
+      busyness_rating: busynessRating,
+      comment: comment.trim() || undefined,
+      photo: photo || undefined,
+    };
+
+    const locationVerification = locationVerified ? {
+      is_valid: true,
+      distance_meters: distanceToVenue || 0,
+      venue_name: venue.name,
+    } : {
+      is_valid: false,
+      distance_meters: distanceToVenue || Infinity,
+      venue_name: venue.name,
+    };
+
+    // Validate all form data
+    const validation = VibeCheckValidator.validateVibeCheckForm(formData, locationVerification);
+    
+    if (!validation.isValid) {
+      const validationSummary = VibeCheckValidator.getValidationSummary(validation);
+      Alert.alert(
+        "Please Fix the Following Issues",
+        validationSummary.allMessages.join('\n'),
+        [{ text: "OK" }]
+      );
+      return;
+    }
+
+    // Check rate limiting
+    if (rateLimitInfo && !rateLimitInfo.canPost) {
+      return; // Rate limit countdown should be visible
+    }
+
+    // Additional location check with user-friendly message
     if (!locationVerified) {
       Alert.alert(
         "Location Required",
@@ -61,20 +136,31 @@ const VibeCheckForm: React.FC<VibeCheckFormProps> = ({
       return;
     }
 
-    const formData: VibeCheckFormData = {
-      venue_id: venue.id,
-      busyness_rating: busynessRating,
-      comment: comment.trim() || undefined,
-      photo: photo || undefined,
-    };
-
     try {
       await onSubmit(formData);
     } catch (error) {
-      Alert.alert("Error", "Failed to post vibe check. Please try again.", [
-        { text: "OK" },
-      ]);
+      // Let parent component handle the error through props
+      console.error('Form submission error:', error);
     }
+  };
+
+  const handleRetry = async () => {
+    setIsRetrying(true);
+    setLocalError(null);
+    
+    try {
+      if (onRetry) {
+        await onRetry();
+      }
+    } catch (error) {
+      console.error('Retry failed:', error);
+    } finally {
+      setIsRetrying(false);
+    }
+  };
+
+  const handleDismissError = () => {
+    setLocalError(null);
   };
 
   const handlePhotoSelect = async () => {
@@ -187,8 +273,8 @@ const VibeCheckForm: React.FC<VibeCheckFormProps> = ({
   };
 
   const locationStatus = getLocationStatus();
-  const isFormValid =
-    locationVerified && busynessRating >= 1 && busynessRating <= 5;
+  const isFormValid = validationResult.isValid && locationVerified && 
+    (rateLimitInfo ? rateLimitInfo.canPost : true);
 
   return (
     <ThemedView style={styles.container}>
@@ -218,6 +304,27 @@ const VibeCheckForm: React.FC<VibeCheckFormProps> = ({
           </ThemedText>
         </View>
 
+        {/* Error Display */}
+        {(error || localError) && (
+          <ErrorDisplay
+            error={error || localError!}
+            onRetry={error?.retryable ? handleRetry : undefined}
+            onDismiss={handleDismissError}
+            isRetrying={isRetrying}
+          />
+        )}
+
+        {/* Rate Limiting Countdown */}
+        {rateLimitInfo && !rateLimitInfo.canPost && rateLimitInfo.timeUntilReset && (
+          <RateLimitCountdown
+            venueId={venue.id}
+            timeUntilReset={rateLimitInfo.timeUntilReset}
+            onComplete={() => {
+              // Parent component should refresh rate limit info
+            }}
+          />
+        )}
+
         {/* Busyness Rating */}
         <View style={styles.section}>
           <ThemedText type="defaultSemiBold" style={styles.sectionTitle}>
@@ -242,7 +349,10 @@ const VibeCheckForm: React.FC<VibeCheckFormProps> = ({
             What&apos;s the vibe? (optional)
           </ThemedText>
           <TextInput
-            style={styles.commentInput}
+            style={[
+              styles.commentInput,
+              comment.length > 280 && styles.commentInputError,
+            ]}
             placeholder="Share what's happening right now..."
             placeholderTextColor={Colors.light.muted}
             value={comment}
@@ -252,9 +362,21 @@ const VibeCheckForm: React.FC<VibeCheckFormProps> = ({
             numberOfLines={4}
             textAlignVertical="top"
           />
-          <ThemedText style={styles.characterCount}>
-            {comment.length}/280
-          </ThemedText>
+          <View style={styles.commentFooter}>
+            <ThemedText 
+              style={[
+                styles.characterCount,
+                comment.length > 280 && styles.characterCountError,
+              ]}
+            >
+              {comment.length}/280
+            </ThemedText>
+            {comment.length > 280 && (
+              <ThemedText style={styles.validationError}>
+                Comment is too long
+              </ThemedText>
+            )}
+          </View>
         </View>
 
         {/* Photo */}
@@ -531,6 +653,25 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: Colors.light.background,
+  },
+  commentInputError: {
+    borderColor: Colors.semantic.error,
+    borderWidth: 2,
+  },
+  commentFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 4,
+  },
+  characterCountError: {
+    color: Colors.semantic.error,
+    fontWeight: "600",
+  },
+  validationError: {
+    fontSize: 12,
+    color: Colors.semantic.error,
+    fontWeight: "500",
   },
 });
 

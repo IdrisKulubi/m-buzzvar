@@ -9,26 +9,44 @@ import {
 } from "../lib/types";
 import { LocationVerificationService } from "./LocationVerificationService";
 import { PhotoUploadService, PhotoUploadProgress } from "./PhotoUploadService";
+import { ErrorFactory, AppError, RetryManager, ErrorParser } from "../lib/errors";
+import { ConnectivityManager } from "../lib/connectivity";
+import { VibeCheckCacheService } from "./CacheService";
+import { OptimizedQueryService } from "./OptimizedQueryService";
 
 export class VibeCheckService {
   /**
-   * Create a new vibe check with location verification
+   * Create a new vibe check with comprehensive error handling and retry mechanism
    * @param data Form data for the vibe check
    * @param userLocation User's current location for verification
-   * @returns Promise with created vibe check or error
+   * @returns Promise with created vibe check or structured error
    */
   static async createVibeCheck(
     data: VibeCheckFormData,
     userLocation: Location.LocationObject
-  ): Promise<{ data: VibeCheck | null; error: any }> {
-    try {
+  ): Promise<{ data: VibeCheck | null; error: AppError | null }> {
+    const operation = async () => {
+      // Check network connectivity
+      const isConnected = await ConnectivityManager.isConnected();
+      if (!isConnected) {
+        throw ErrorFactory.networkOffline();
+      }
+
       // Get current user
       const {
         data: { user },
         error: userError,
       } = await supabase.auth.getUser();
-      if (userError || !user) {
-        return { data: null, error: "User not authenticated" };
+      
+      if (userError) {
+        if (userError.message?.includes('JWT') || userError.message?.includes('expired')) {
+          throw ErrorFactory.authExpired();
+        }
+        throw ErrorFactory.authRequired();
+      }
+      
+      if (!user) {
+        throw ErrorFactory.authRequired();
       }
 
       // Verify location against venue
@@ -38,8 +56,12 @@ export class VibeCheckService {
         .eq("id", data.venue_id)
         .single();
 
-      if (venueError || !venue) {
-        return { data: null, error: "Venue not found" };
+      if (venueError) {
+        throw ErrorFactory.databaseError(`Venue lookup failed: ${venueError.message}`);
+      }
+      
+      if (!venue) {
+        throw ErrorFactory.invalidInput('venue', 'Venue not found');
       }
 
       const locationVerification =
@@ -49,20 +71,16 @@ export class VibeCheckService {
         );
 
       if (!locationVerification.is_valid) {
-        return {
-          data: null,
-          error: `You must be within ${LocationVerificationService.MAX_DISTANCE_METERS}m of the venue to post a vibe check. You are ${locationVerification.distance_meters}m away.`,
-        };
+        throw ErrorFactory.locationTooFar(
+          locationVerification.distance_meters,
+          LocationVerificationService.MAX_DISTANCE_METERS
+        );
       }
 
       // Check rate limiting (one vibe check per user per venue per hour)
-      const canPost = await this.canUserPostVibeCheck(user.id, data.venue_id);
-      if (!canPost) {
-        return {
-          data: null,
-          error:
-            "You can only post one vibe check per venue per hour. Please wait before posting again.",
-        };
+      const rateLimitResult = await this.checkRateLimit(user.id, data.venue_id);
+      if (!rateLimitResult.canPost) {
+        throw ErrorFactory.rateLimited(rateLimitResult.timeUntilReset || 3600000);
       }
 
       // Upload photo if provided
@@ -73,10 +91,7 @@ export class VibeCheckService {
           user.id
         );
         if (photoResult.error) {
-          return {
-            data: null,
-            error: `Photo upload failed: ${photoResult.error}`,
-          };
+          throw ErrorParser.parseError(photoResult.error);
         }
         photoUrl = photoResult.data;
       }
@@ -99,103 +114,120 @@ export class VibeCheckService {
         .single();
 
       if (insertError) {
-        return { data: null, error: insertError.message };
+        // Handle specific database constraint errors
+        if (insertError.code === '23505') { // Unique constraint violation
+          throw ErrorFactory.rateLimited(3600000); // 1 hour
+        }
+        throw ErrorFactory.databaseError(insertError.message);
       }
 
+      // Invalidate relevant cache entries
+      await VibeCheckCacheService.invalidateOnVibeCheckCreate(data.venue_id);
+
+      return vibeCheck;
+    };
+
+    try {
+      const vibeCheck = await RetryManager.executeWithRetry(
+        operation,
+        ErrorFactory.unknownError(),
+        `createVibeCheck_${data.venue_id}`
+      );
       return { data: vibeCheck, error: null };
     } catch (error) {
-      console.error(error)
-      return {
-        data: null,
-        error: "Failed to create vibe check. Please try again.",
-      };
+      console.error('Failed to create vibe check:', error);
+      const appError = error instanceof Error ? ErrorParser.parseError(error) : error as AppError;
+      return { data: null, error: appError };
     }
   }
 
   /**
-   * Get recent vibe checks for a specific venue
+   * Get recent vibe checks for a specific venue with caching and optimization
    * @param venueId ID of the venue
    * @param hoursBack Number of hours to look back (default: 4)
-   * @returns Promise with vibe checks or error
+   * @returns Promise with vibe checks or structured error
    */
   static async getVenueVibeChecks(
     venueId: string,
     hoursBack: number = 4
-  ): Promise<{ data: VibeCheckWithDetails[]; error: any }> {
+  ): Promise<{ data: VibeCheckWithDetails[]; error: AppError | null }> {
     try {
-      const cutoffTime = new Date();
-      cutoffTime.setHours(cutoffTime.getHours() - hoursBack);
-
-      const { data: vibeChecks, error } = await supabase
-        .from("vibe_checks")
-        .select(
-          `
-          *,
-          user:users(id, name, avatar_url),
-          venue:venues(id, name, address)
-        `
-        )
-        .eq("venue_id", venueId)
-        .gte("created_at", cutoffTime.toISOString())
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        return { data: [], error: error.message };
+      // Check cache first
+      const cachedData = await VibeCheckCacheService.getCachedVenueVibeChecks(venueId, hoursBack);
+      if (cachedData) {
+        return { data: cachedData, error: null };
       }
 
-      const vibeChecksWithDetails = vibeChecks.map(
-        this.transformToVibeCheckWithDetails
+      // Check network connectivity
+      const isConnected = await ConnectivityManager.isConnected();
+      if (!isConnected) {
+        return { data: [], error: ErrorFactory.networkOffline() };
+      }
+
+      // Use optimized query service
+      const { data: vibeChecks, error } = await OptimizedQueryService.getVenueVibeChecksOptimized(
+        venueId,
+        hoursBack
       );
-      return { data: vibeChecksWithDetails, error: null };
+
+      if (error) {
+        const appError = error instanceof Error ? ErrorParser.parseError(error) : error as AppError;
+        return { data: [], error: appError };
+      }
+
+      // Cache the results
+      await VibeCheckCacheService.cacheVenueVibeChecks(venueId, hoursBack, vibeChecks);
+
+      return { data: vibeChecks, error: null };
     } catch (error) {
-      console.error(error)
-      return {
-        data: [],
-        error: "Failed to fetch venue vibe checks. Please try again.",
-      };
+      console.error('Failed to fetch venue vibe checks:', error);
+      const appError = error instanceof Error ? ErrorParser.parseError(error) : error as AppError;
+      return { data: [], error: appError };
     }
   }
 
   /**
-   * Get live feed of all recent vibe checks across venues
+   * Get live feed of all recent vibe checks across venues with caching and optimization
    * @param hoursBack Number of hours to look back (default: 4)
    * @param limit Maximum number of results (default: 50)
-   * @returns Promise with vibe checks or error
+   * @returns Promise with vibe checks or structured error
    */
   static async getLiveVibeChecks(
     hoursBack: number = 4,
     limit: number = 50
-  ): Promise<{ data: VibeCheckWithDetails[]; error: any }> {
+  ): Promise<{ data: VibeCheckWithDetails[]; error: AppError | null }> {
     try {
-      const cutoffTime = new Date();
-      cutoffTime.setHours(cutoffTime.getHours() - hoursBack);
-
-      const { data: vibeChecks, error } = await supabase
-        .from("vibe_checks")
-        .select(
-          `
-          *,
-          user:users(id, name, avatar_url),
-          venue:venues(id, name, address)
-        `
-        )
-        .gte("created_at", cutoffTime.toISOString())
-        .order("created_at", { ascending: false })
-        .limit(limit);
-
-      if (error) {
-        return { data: [], error: error.message };
+      // Check cache first
+      const cachedData = await VibeCheckCacheService.getCachedLiveVibeChecks(hoursBack, limit);
+      if (cachedData) {
+        return { data: cachedData, error: null };
       }
 
-      const vibeChecksWithDetails = vibeChecks.map(
-        this.transformToVibeCheckWithDetails
+      // Check network connectivity
+      const isConnected = await ConnectivityManager.isConnected();
+      if (!isConnected) {
+        return { data: [], error: ErrorFactory.networkOffline() };
+      }
+
+      // Use optimized query service
+      const { data: vibeChecks, error } = await OptimizedQueryService.getLiveVibeChecksOptimized(
+        hoursBack,
+        { limit }
       );
-      return { data: vibeChecksWithDetails, error: null };
+
+      if (error) {
+        const appError = error instanceof Error ? ErrorParser.parseError(error) : error as AppError;
+        return { data: [], error: appError };
+      }
+
+      // Cache the results
+      await VibeCheckCacheService.cacheLiveVibeChecks(hoursBack, limit, vibeChecks);
+
+      return { data: vibeChecks, error: null };
     } catch (error) {
-      return {
-        data: [],
-        error: "Failed to fetch live vibe checks. Please try again.",
-      };
+      console.error('Failed to fetch live vibe checks:', error);
+      const appError = error instanceof Error ? ErrorParser.parseError(error) : error as AppError;
+      return { data: [], error: appError };
     }
   }
 
@@ -230,40 +262,60 @@ export class VibeCheckService {
   }
 
   /**
+   * Check rate limiting with caching and optimization
+   * @param userId User ID
+   * @param venueId Venue ID
+   * @returns Promise with rate limit status and time until reset
+   */
+  static async checkRateLimit(
+    userId: string,
+    venueId: string
+  ): Promise<{
+    canPost: boolean;
+    timeUntilReset?: number;
+    lastVibeCheck?: Date;
+  }> {
+    try {
+      // Check cache first
+      const cachedResult = await VibeCheckCacheService.getCachedUserRateLimit(userId, venueId);
+      if (cachedResult) {
+        return cachedResult;
+      }
+
+      // Use optimized query service
+      const { data: result, error } = await OptimizedQueryService.getUserRecentVibeCheckOptimized(
+        userId,
+        venueId
+      );
+
+      if (error) {
+        console.warn("Error checking rate limit:", error);
+        return { canPost: true };
+      }
+
+      // Cache the result
+      await VibeCheckCacheService.cacheUserRateLimit(userId, venueId, result);
+
+      return result;
+    } catch (error) {
+      console.warn("Error checking rate limit:", error);
+      return { canPost: true };
+    }
+  }
+
+  /**
    * Check if user can post a vibe check for a venue (rate limiting)
    * @param userId User ID
    * @param venueId Venue ID
    * @returns Promise with boolean result
+   * @deprecated Use checkRateLimit for more detailed information
    */
   static async canUserPostVibeCheck(
     userId: string,
     venueId: string
   ): Promise<boolean> {
-    try {
-      const oneHourAgo = new Date();
-      oneHourAgo.setHours(oneHourAgo.getHours() - 1);
-
-      const { data, error } = await supabase
-        .from("vibe_checks")
-        .select("id")
-        .eq("user_id", userId)
-        .eq("venue_id", venueId)
-        .gte("created_at", oneHourAgo.toISOString())
-        .limit(1);
-
-      if (error) {
-        // If there's an error checking, allow the post (fail open)
-        console.warn("Error checking rate limit:", error);
-        return true;
-      }
-
-      // User can post if no recent vibe check exists
-      return data.length === 0;
-    } catch (error) {
-      // If there's an error checking, allow the post (fail open)
-      console.warn("Error checking rate limit:", error);
-      return true;
-    }
+    const result = await this.checkRateLimit(userId, venueId);
+    return result.canPost;
   }
 
   /**
@@ -431,7 +483,7 @@ export class VibeCheckService {
   }
 
   /**
-   * Get venue statistics based on recent vibe checks
+   * Get venue statistics based on recent vibe checks with caching and optimization
    * @param venueId ID of the venue
    * @param hoursBack Number of hours to look back (default: 4)
    * @returns Promise with venue statistics or error
@@ -449,53 +501,26 @@ export class VibeCheckService {
     error: any;
   }> {
     try {
-      const cutoffTime = new Date();
-      cutoffTime.setHours(cutoffTime.getHours() - hoursBack);
-      const twoHoursAgo = new Date();
-      twoHoursAgo.setHours(twoHoursAgo.getHours() - 2);
-
-      const { data: vibeChecks, error } = await supabase
-        .from("vibe_checks")
-        .select(
-          `
-          *,
-          user:users(id, name, avatar_url),
-          venue:venues(id, name, address)
-        `
-        )
-        .eq("venue_id", venueId)
-        .gte("created_at", cutoffTime.toISOString())
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        return { data: null, error: error.message };
+      // Check cache first
+      const cachedStats = await VibeCheckCacheService.getCachedVenueVibeStats(venueId, hoursBack);
+      if (cachedStats) {
+        return { data: cachedStats, error: null };
       }
 
-      const recentCount = vibeChecks.length;
-      const averageBusyness =
-        recentCount > 0
-          ? vibeChecks.reduce((sum, vc) => sum + vc.busyness_rating, 0) /
-            recentCount
-          : null;
-
-      const hasLiveActivity = vibeChecks.some(
-        (vc) => new Date(vc.created_at) > twoHoursAgo
+      // Use optimized query service
+      const { data: stats, error } = await OptimizedQueryService.getVenueVibeStatsOptimized(
+        venueId,
+        hoursBack
       );
 
-      const latestVibeCheck =
-        vibeChecks.length > 0
-          ? this.transformToVibeCheckWithDetails(vibeChecks[0])
-          : null;
+      if (error) {
+        return { data: null, error: error.message || "Failed to fetch venue vibe stats" };
+      }
 
-      return {
-        data: {
-          recent_count: recentCount,
-          average_busyness: averageBusyness,
-          has_live_activity: hasLiveActivity,
-          latest_vibe_check: latestVibeCheck,
-        },
-        error: null,
-      };
+      // Cache the results
+      await VibeCheckCacheService.cacheVenueVibeStats(venueId, hoursBack, stats);
+
+      return { data: stats, error: null };
     } catch (error) {
       return {
         data: null,

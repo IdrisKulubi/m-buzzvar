@@ -14,10 +14,11 @@ import { Ionicons, Feather } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/src/lib/hooks';
 import { useToast } from '@/src/lib/ToastProvider';
-import { toggleBookmark, recordClubView } from '@/src/actions/clubs';
+import { toggleBookmark, recordClubView, getVenues } from '@/src/actions/clubs';
 import { BottomSheetModal, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import VenueDetailsSheet from './VenueDetailsSheet';
 import StarRating from './StarRating';
+import LiveIndicator from './LiveIndicator';
 
 const SwipeFeed: React.FC = () => {
   const colorScheme = useColorScheme() ?? 'dark';
@@ -49,25 +50,36 @@ const SwipeFeed: React.FC = () => {
       }
     }
 
-    const { data, error } = await supabase
-      .from('venues_with_ratings')
-      .select('*, menus(*), promotions(*)')
-      .limit(20);
+    // Use the updated getVenues function that includes vibe check data
+    const { data: venuesData, error } = await getVenues();
 
     if (error) {
       console.error('Error fetching venues:', error);
       showToast({ type: 'error', message: "Couldn't fetch venues" });
     } else {
-      const processedVenues = data.map(v => ({
-        ...v,
-        isBookmarked: bookmarkedIds.has(v.id),
-        isLiked: false, // Placeholder for like state
-      }));
-      setVenues(processedVenues);
+      // Fetch additional data (menus, promotions) for each venue
+      const venuesWithExtras = await Promise.all(
+        venuesData.slice(0, 20).map(async (venue) => {
+          const [menusResult, promotionsResult] = await Promise.all([
+            supabase.from('menus').select('*').eq('venue_id', venue.id),
+            supabase.from('promotions').select('*').eq('venue_id', venue.id).eq('is_active', true)
+          ]);
+
+          return {
+            ...venue,
+            menus: menusResult.data || [],
+            promotions: promotionsResult.data || [],
+            isBookmarked: bookmarkedIds.has(venue.id),
+            isLiked: false, // Placeholder for like state
+          };
+        })
+      );
+
+      setVenues(venuesWithExtras);
       
       // If a venue is open in the sheet, update its data as well
       if (selectedVenue) {
-        const updatedSelected = processedVenues.find(v => v.id === selectedVenue.id);
+        const updatedSelected = venuesWithExtras.find(v => v.id === selectedVenue.id);
         if (updatedSelected) {
           setSelectedVenue(updatedSelected);
         }
@@ -160,6 +172,18 @@ const SwipeFeed: React.FC = () => {
         <View style={styles.promotionBadge}>
           <Ionicons name="star" size={14} color={colors.background} />
           <Text style={styles.promotionText}>{item.promotions[0].title}</Text>
+        </View>
+      )}
+
+      {/* Live indicator positioned in top right */}
+      {(item.has_live_activity || item.recent_vibe_count > 0) && (
+        <View style={styles.liveIndicatorContainer}>
+          <LiveIndicator
+            hasLiveActivity={item.has_live_activity}
+            averageBusyness={item.average_recent_busyness}
+            recentVibeCount={item.recent_vibe_count}
+            size="medium"
+          />
         </View>
       )}
 
@@ -296,6 +320,12 @@ const getStyles = (colors: typeof Colors.dark) => StyleSheet.create({
     color: colors.background,
     fontWeight: 'bold',
     fontSize: 12,
+  },
+  liveIndicatorContainer: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    zIndex: 1,
   },
   cardContent: {
     padding: 16,

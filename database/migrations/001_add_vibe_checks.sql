@@ -12,16 +12,18 @@ CREATE TABLE IF NOT EXISTS public.vibe_checks (
     photo_url TEXT,
     user_latitude DECIMAL(10, 8) NOT NULL,
     user_longitude DECIMAL(11, 8) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
-    
-    -- Constraint: One vibe check per user per venue per hour
-    CONSTRAINT unique_user_venue_hour UNIQUE (user_id, venue_id, DATE_TRUNC('hour', created_at))
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
 );
 
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_vibe_checks_venue_recent ON public.vibe_checks(venue_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_vibe_checks_recent ON public.vibe_checks(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_vibe_checks_user ON public.vibe_checks(user_id);
+
+-- Create unique index for one vibe check per user per venue per hour
+-- Using a partial index approach instead of DATE_TRUNC to avoid immutability issues
+CREATE UNIQUE INDEX IF NOT EXISTS idx_vibe_checks_unique_user_venue_hour 
+ON public.vibe_checks(user_id, venue_id, (created_at::date), EXTRACT(hour FROM created_at));
 
 -- Enable RLS
 ALTER TABLE public.vibe_checks ENABLE ROW LEVEL SECURITY;

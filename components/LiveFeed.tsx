@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -13,7 +13,11 @@ import VibeCheckCard from './VibeCheckCard';
 import { Colors } from '@/constants/Colors';
 import { VibeCheckWithDetails } from '@/src/lib/types';
 import { VibeCheckService } from '@/src/services/VibeCheckService';
+import { VibeCheckRealtimeService } from '@/src/services/VibeCheckRealtimeService';
+import { ImageCacheService } from '@/src/services/ImageCacheService';
 import { Ionicons } from '@expo/vector-icons';
+import { AppError, RetryManager } from '@/src/lib/errors';
+import ErrorDisplay from './ErrorDisplay';
 
 interface LiveFeedProps {
   refreshing: boolean;
@@ -38,7 +42,9 @@ const LiveFeed: React.FC<LiveFeedProps> = ({
   
   const [vibeChecks, setVibeChecks] = useState<VibeCheckWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<AppError | null>(null);
+  const [isRetrying, setIsRetrying] = useState(false);
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
 
   // Group vibe checks by venue
   const groupedVibeChecks = React.useMemo(() => {
@@ -74,12 +80,82 @@ const LiveFeed: React.FC<LiveFeedProps> = ({
         setError(fetchError);
       } else {
         setVibeChecks(data);
+        
+        // Preload images for better performance
+        const imageUrls = data
+          .filter(vc => vc.photo_url)
+          .map(vc => vc.photo_url!)
+          .slice(0, 10); // Preload first 10 images
+        
+        if (imageUrls.length > 0) {
+          ImageCacheService.preloadImages(imageUrls, { priority: 'low' });
+        }
       }
     } catch (err) {
-      setError('Failed to load vibe checks. Please try again.');
+      console.error('Failed to fetch vibe checks:', err);
+      setError(err as AppError);
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  const handleRetry = useCallback(async () => {
+    setIsRetrying(true);
+    await fetchVibeChecks();
+    setIsRetrying(false);
+  }, [fetchVibeChecks]);
+
+  // Set up real-time subscription
+  useEffect(() => {
+    const subscriptionId = 'live-feed-subscription';
+    
+    const setupRealtimeSubscription = async () => {
+      try {
+        const result = await VibeCheckRealtimeService.subscribe(subscriptionId, {
+          onVibeCheckInsert: (newVibeCheck) => {
+            setVibeChecks(prev => {
+              // Add new vibe check to the beginning and remove duplicates
+              const filtered = prev.filter(vc => vc.id !== newVibeCheck.id);
+              return [newVibeCheck, ...filtered].slice(0, 50); // Keep only 50 most recent
+            });
+            
+            // Preload new image if available
+            if (newVibeCheck.photo_url) {
+              ImageCacheService.getCachedImage(newVibeCheck.photo_url, { priority: 'high' });
+            }
+          },
+          onVibeCheckUpdate: (updatedVibeCheck) => {
+            setVibeChecks(prev => 
+              prev.map(vc => vc.id === updatedVibeCheck.id ? updatedVibeCheck : vc)
+            );
+          },
+          onVibeCheckDelete: (vibeCheckId) => {
+            setVibeChecks(prev => prev.filter(vc => vc.id !== vibeCheckId));
+          },
+          onError: (error) => {
+            console.error('Real-time subscription error:', error);
+            setRealtimeConnected(false);
+          },
+        });
+        
+        if (result.success) {
+          setRealtimeConnected(true);
+        } else {
+          console.warn('Failed to establish real-time connection:', result.error);
+          setRealtimeConnected(false);
+        }
+      } catch (error) {
+        console.error('Error setting up real-time subscription:', error);
+        setRealtimeConnected(false);
+      }
+    };
+
+    setupRealtimeSubscription();
+
+    // Cleanup subscription on unmount
+    return () => {
+      VibeCheckRealtimeService.unsubscribe(subscriptionId);
+    };
   }, []);
 
   useEffect(() => {
@@ -151,15 +227,13 @@ const LiveFeed: React.FC<LiveFeedProps> = ({
 
   const renderErrorState = () => (
     <View style={styles.errorState}>
-      <View style={[styles.errorIconContainer, { backgroundColor: colors.surface }]}>
-        <Ionicons name="alert-circle-outline" size={48} color={colors.destructive} />
-      </View>
-      <ThemedText type="title" style={[styles.errorTitle, { color: colors.text }]}>
-        Something went wrong
-      </ThemedText>
-      <ThemedText style={[styles.errorSubtitle, { color: colors.muted }]}>
-        {error}
-      </ThemedText>
+      {error && (
+        <ErrorDisplay
+          error={error}
+          onRetry={error.retryable ? handleRetry : undefined}
+          isRetrying={isRetrying}
+        />
+      )}
     </View>
   );
 
