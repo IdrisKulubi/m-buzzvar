@@ -8,20 +8,21 @@ import {
   RefreshControl,
   useColorScheme,
   TouchableOpacity,
-  ActivityIndicator,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Image } from 'expo-image'
 import { Colors } from '@/constants/Colors'
 import { useAuth } from '@/src/lib/hooks'
 import { getUserProfile } from '@/src/actions/auth'
-import { getVenues, getUserBookmarks, VenueWithDistance } from '@/src/actions/clubs'
+import { getVenues, getUserBookmarks, getVenueReviewStats, VenueWithDistance } from '@/src/actions/clubs'
 import LiveIndicator from '@/components/LiveIndicator'
 import { Ionicons } from '@expo/vector-icons'
 import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '@/src/lib/supabase'
 import { BottomSheetModal } from '@gorhom/bottom-sheet'
 import VenueDetailsSheet from '@/components/VenueDetailsSheet'
+import VibesSection from '@/components/VibesSection'
+import HomeScreenSkeleton from '@/components/skeletons/HomeScreenSkeleton'
 
 interface UserProfile {
   id: string
@@ -70,12 +71,8 @@ export default function HomeScreen() {
         getUserProfile(user.id),
         // Use the updated getVenues function that includes vibe check data
         getVenues(),
-        // Fetch bookmarked venues with their details and promotions
-        supabase
-          .from('user_bookmarks')
-          .select('venues:venue_id(*, promotions(*), reviews(count))')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false }),
+        // Use the getUserBookmarks function instead of direct query
+        getUserBookmarks(user.id),
       ])
 
       if (profileResult.error) console.error('Error loading profile:', profileResult.error)
@@ -109,15 +106,19 @@ export default function HomeScreen() {
       if (bookmarksResult.error) {
         console.error('Error fetching bookmarks:', bookmarksResult.error)
       } else {
-        const bookmarks = bookmarksResult.data?.map((b: any) => {
-          const venue = b.venues;
-          // Manually add review_count and average_rating if needed, or adjust view
-          return {
-            ...venue,
-            review_count: venue.reviews[0]?.count || 0,
-          };
-        }) || [];
-        setBookmarkedVenues(bookmarks)
+        // Add review stats to each bookmarked venue
+        const bookmarksWithStats = await Promise.all(
+          (bookmarksResult.data || []).map(async (venue: any) => {
+            // Get review stats for this venue using our helper function
+            const reviewStats = await getVenueReviewStats(venue.id);
+            return {
+              ...venue,
+              review_count: reviewStats.count,
+              average_rating: reviewStats.average,
+            };
+          })
+        );
+        setBookmarkedVenues(bookmarksWithStats)
       }
 
     } catch (error) {
@@ -145,11 +146,7 @@ export default function HomeScreen() {
       flex: 1,
       backgroundColor: colors.background,
     },
-    loadingContainer: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
+
     scrollContent: {
       paddingVertical: 20,
       paddingBottom: 120, // Extra padding for tab bar
@@ -311,11 +308,7 @@ export default function HomeScreen() {
   })
 
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.tint} />
-      </View>
-    )
+    return <HomeScreenSkeleton />;
   }
 
   return (
@@ -376,6 +369,9 @@ export default function HomeScreen() {
             ))}
           </ScrollView>
         </View>
+
+        {/* Live Vibes Section */}
+        <VibesSection onRefresh={loadDashboardData} />
 
         {/* Bookmarked Venues */}
         <View style={styles.sectionContainer}>

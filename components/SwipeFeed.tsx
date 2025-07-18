@@ -12,7 +12,6 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  ActivityIndicator,
   useColorScheme,
   Image,
 } from "react-native";
@@ -21,10 +20,11 @@ import { Colors } from "@/constants/Colors";
 import { useAuth } from "@/src/lib/hooks";
 import { useToast } from "@/src/lib/ToastProvider";
 import { toggleBookmark, recordClubView, getVenues } from "@/src/actions/clubs";
-import { BottomSheetModal, BottomSheetScrollView } from "@gorhom/bottom-sheet";
+import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import VenueDetailsSheet from "./VenueDetailsSheet";
 import StarRating from "./StarRating";
 import LiveIndicator from "./LiveIndicator";
+import SwipeFeedSkeleton from "./skeletons/SwipeFeedSkeleton";
 
 const SwipeFeed: React.FC = () => {
   const colorScheme = useColorScheme() ?? "dark";
@@ -106,7 +106,7 @@ const SwipeFeed: React.FC = () => {
       setLoading(false);
     };
     initialLoad();
-  }, [user]);
+  }, [loadVenues, user]);
 
   const handlePresentDetails = useCallback((venue: any) => {
     setSelectedVenue(venue);
@@ -290,12 +290,7 @@ const SwipeFeed: React.FC = () => {
   );
 
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.tint} />
-        <Text style={styles.loadingText}>Finding venues...</Text>
-      </View>
-    );
+    return <SwipeFeedSkeleton />;
   }
 
   return (
@@ -433,16 +428,6 @@ const getStyles = (colors: typeof Colors.dark) =>
       color: colors.text,
       fontSize: 14,
       fontWeight: "500",
-    },
-    loadingContainer: {
-      flex: 1,
-      justifyContent: "center",
-      alignItems: "center",
-      backgroundColor: colors.background,
-    },
-    loadingText: {
-      color: colors.text,
-      marginTop: 10,
     },
   });
 

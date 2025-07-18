@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   StyleSheet,
   FlatList,
   RefreshControl,
-  ActivityIndicator,
   useColorScheme,
 } from 'react-native';
 import { ThemedText } from './ThemedText';
@@ -16,7 +15,7 @@ import { VibeCheckService } from '@/src/services/VibeCheckService';
 import { VibeCheckRealtimeService } from '@/src/services/VibeCheckRealtimeService';
 import { ImageCacheService } from '@/src/services/ImageCacheService';
 import { Ionicons } from '@expo/vector-icons';
-import { AppError, RetryManager } from '@/src/lib/errors';
+import { AppError } from '@/src/lib/errors';
 import ErrorDisplay from './ErrorDisplay';
 
 interface LiveFeedProps {
@@ -44,7 +43,6 @@ const LiveFeed: React.FC<LiveFeedProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<AppError | null>(null);
   const [isRetrying, setIsRetrying] = useState(false);
-  const [realtimeConnected, setRealtimeConnected] = useState(false);
 
   // Group vibe checks by venue
   const groupedVibeChecks = React.useMemo(() => {
@@ -134,19 +132,14 @@ const LiveFeed: React.FC<LiveFeedProps> = ({
           },
           onError: (error) => {
             console.error('Real-time subscription error:', error);
-            setRealtimeConnected(false);
           },
         });
         
-        if (result.success) {
-          setRealtimeConnected(true);
-        } else {
+        if (!result.success) {
           console.warn('Failed to establish real-time connection:', result.error);
-          setRealtimeConnected(false);
         }
       } catch (error) {
         console.error('Error setting up real-time subscription:', error);
-        setRealtimeConnected(false);
       }
     };
 
@@ -237,12 +230,66 @@ const LiveFeed: React.FC<LiveFeedProps> = ({
     </View>
   );
 
+  const renderSkeletonCard = () => (
+    <View style={[styles.skeletonCard, { backgroundColor: colors.surface }]}>
+      {/* Header skeleton */}
+      <View style={styles.skeletonHeader}>
+        <View style={styles.skeletonRow}>
+          <View style={[styles.skeletonAvatar, { backgroundColor: colors.border }]} />
+          <View style={styles.skeletonUserInfo}>
+            <View style={[styles.skeletonText, styles.skeletonUserName, { backgroundColor: colors.border }]} />
+            <View style={[styles.skeletonText, styles.skeletonTimestamp, { backgroundColor: colors.border }]} />
+          </View>
+        </View>
+      </View>
+      
+      {/* Busyness skeleton */}
+      <View style={styles.skeletonBusynessSection}>
+        <View style={[styles.skeletonBusyness, { backgroundColor: colors.border }]} />
+        <View style={[styles.skeletonLiveIndicator, { backgroundColor: colors.border }]} />
+      </View>
+      
+      {/* Comment skeleton */}
+      <View style={styles.skeletonCommentSection}>
+        <View style={[styles.skeletonText, styles.skeletonCommentLine1, { backgroundColor: colors.border }]} />
+        <View style={[styles.skeletonText, styles.skeletonCommentLine2, { backgroundColor: colors.border }]} />
+      </View>
+      
+      {/* Photo skeleton */}
+      <View style={[styles.skeletonPhoto, { backgroundColor: colors.border }]} />
+      
+      {/* Venue footer skeleton */}
+      <View style={styles.skeletonVenueFooter}>
+        <View style={[styles.skeletonText, styles.skeletonVenueText, { backgroundColor: colors.border }]} />
+      </View>
+    </View>
+  );
+
+  const renderSkeletonVenueGroup = () => (
+    <View style={styles.skeletonVenueGroup}>
+      {/* Venue header skeleton */}
+      <View style={[styles.skeletonVenueHeader, { backgroundColor: colors.surface }]}>
+        <View style={styles.skeletonRow}>
+          <View style={[styles.skeletonLocationIcon, { backgroundColor: colors.border }]} />
+          <View style={styles.skeletonVenueInfo}>
+            <View style={[styles.skeletonText, styles.skeletonVenueName, { backgroundColor: colors.border }]} />
+            <View style={[styles.skeletonText, styles.skeletonVenueAddress, { backgroundColor: colors.border }]} />
+          </View>
+        </View>
+        <View style={[styles.skeletonCountBadge, { backgroundColor: colors.border }]} />
+      </View>
+      
+      {/* Skeleton cards for this venue */}
+      {renderSkeletonCard()}
+      {renderSkeletonCard()}
+    </View>
+  );
+
   const renderLoadingState = () => (
-    <View style={styles.loadingState}>
-      <ActivityIndicator size="large" color={colors.tint} />
-      <ThemedText style={[styles.loadingText, { color: colors.muted }]}>
-        Loading live vibes...
-      </ThemedText>
+    <View style={styles.loadingContainer}>
+      {renderSkeletonVenueGroup()}
+      {renderSkeletonVenueGroup()}
+      {renderSkeletonVenueGroup()}
     </View>
   );
 
@@ -401,14 +448,121 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 24,
   },
-  loadingState: {
+  loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
+    paddingVertical: 8,
+  },
+  skeletonVenueGroup: {
+    marginBottom: 24,
+  },
+  skeletonVenueHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderRadius: 12,
+  },
+  skeletonCard: {
+    borderRadius: 12,
+    padding: 16,
+    marginVertical: 6,
+    marginHorizontal: 16,
+  },
+  skeletonHeader: {
+    marginBottom: 12,
+  },
+  skeletonRow: {
+    flexDirection: 'row',
     alignItems: 'center',
   },
-  loadingText: {
-    fontSize: 16,
-    marginTop: 16,
+  skeletonAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 12,
+  },
+  skeletonUserInfo: {
+    flex: 1,
+  },
+  skeletonText: {
+    borderRadius: 4,
+    opacity: 0.6,
+  },
+  skeletonUserName: {
+    height: 16,
+    width: '40%',
+    marginBottom: 4,
+  },
+  skeletonTimestamp: {
+    height: 12,
+    width: '25%',
+  },
+  skeletonBusynessSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  skeletonBusyness: {
+    height: 24,
+    width: 120,
+    borderRadius: 12,
+  },
+  skeletonLiveIndicator: {
+    height: 24,
+    width: 50,
+    borderRadius: 12,
+  },
+  skeletonCommentSection: {
+    marginBottom: 12,
+  },
+  skeletonCommentLine1: {
+    height: 15,
+    width: '90%',
+    marginBottom: 6,
+  },
+  skeletonCommentLine2: {
+    height: 15,
+    width: '70%',
+  },
+  skeletonPhoto: {
+    width: '100%',
+    height: 200,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  skeletonVenueFooter: {
+    paddingTop: 8,
+  },
+  skeletonVenueText: {
+    height: 14,
+    width: '60%',
+  },
+  skeletonLocationIcon: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    marginRight: 12,
+  },
+  skeletonVenueInfo: {
+    flex: 1,
+  },
+  skeletonVenueName: {
+    height: 18,
+    width: '50%',
+    marginBottom: 4,
+  },
+  skeletonVenueAddress: {
+    height: 14,
+    width: '70%',
+  },
+  skeletonCountBadge: {
+    width: 32,
+    height: 28,
+    borderRadius: 16,
   },
 });
 
