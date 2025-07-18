@@ -8,6 +8,7 @@ import {
   Alert,
   ScrollView,
   ActivityIndicator,
+  useColorScheme,
 } from "react-native";
 import { ThemedText } from "./ThemedText";
 import { ThemedView } from "./ThemedView";
@@ -22,10 +23,13 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { PhotoUploadProgress } from "@/src/services/PhotoUploadService";
-import { AppError, ErrorType, RateLimitManager } from "@/src/lib/errors";
+import { AppError } from "@/src/lib/errors";
 import ErrorDisplay from "./ErrorDisplay";
 import { RateLimitCountdown } from "./CountdownTimer";
-import { VibeCheckValidator, ValidationResult } from "@/src/lib/vibeCheckValidation";
+import {
+  VibeCheckValidator,
+  ValidationResult,
+} from "@/src/lib/vibeCheckValidation";
 
 interface VibeCheckFormProps {
   venue: Venue;
@@ -53,6 +57,9 @@ const VibeCheckForm: React.FC<VibeCheckFormProps> = ({
   onRetry,
   rateLimitInfo,
 }) => {
+  const colorScheme = useColorScheme() ?? "dark";
+  const colors = Colors[colorScheme];
+
   const [busynessRating, setBusynessRating] = useState<BusynessRating>(3);
   const [comment, setComment] = useState("");
   const [photo, setPhoto] = useState<{
@@ -60,12 +67,17 @@ const VibeCheckForm: React.FC<VibeCheckFormProps> = ({
     type: string;
     name: string;
   } | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [uploadProgress, setUploadProgress] =
     useState<PhotoUploadProgress | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [localError, setLocalError] = useState<AppError | null>(null);
   const [isRetrying, setIsRetrying] = useState(false);
-  const [validationResult, setValidationResult] = useState<ValidationResult>({ isValid: true, errors: [] });
+  const [validationResult, setValidationResult] = useState<ValidationResult>({
+    isValid: true,
+    errors: [],
+  });
 
   // Validate form data whenever inputs change
   useEffect(() => {
@@ -76,15 +88,28 @@ const VibeCheckForm: React.FC<VibeCheckFormProps> = ({
       photo: photo || undefined,
     };
 
-    const locationVerification = locationVerified ? {
-      is_valid: true,
-      distance_meters: distanceToVenue || 0,
-      venue_name: venue.name,
-    } : undefined;
+    const locationVerification = locationVerified
+      ? {
+          is_valid: true,
+          distance_meters: distanceToVenue || 0,
+          venue_name: venue.name,
+        }
+      : undefined;
 
-    const validation = VibeCheckValidator.validateVibeCheckForm(formData, locationVerification);
+    const validation = VibeCheckValidator.validateVibeCheckForm(
+      formData,
+      locationVerification
+    );
     setValidationResult(validation);
-  }, [venue.id, venue.name, busynessRating, comment, photo, locationVerified, distanceToVenue]);
+  }, [
+    venue.id,
+    venue.name,
+    busynessRating,
+    comment,
+    photo,
+    locationVerified,
+    distanceToVenue,
+  ]);
 
   const handleSubmit = async () => {
     // Clear any previous local errors
@@ -98,24 +123,30 @@ const VibeCheckForm: React.FC<VibeCheckFormProps> = ({
       photo: photo || undefined,
     };
 
-    const locationVerification = locationVerified ? {
-      is_valid: true,
-      distance_meters: distanceToVenue || 0,
-      venue_name: venue.name,
-    } : {
-      is_valid: false,
-      distance_meters: distanceToVenue || Infinity,
-      venue_name: venue.name,
-    };
+    const locationVerification = locationVerified
+      ? {
+          is_valid: true,
+          distance_meters: distanceToVenue || 0,
+          venue_name: venue.name,
+        }
+      : {
+          is_valid: false,
+          distance_meters: distanceToVenue || Infinity,
+          venue_name: venue.name,
+        };
 
     // Validate all form data
-    const validation = VibeCheckValidator.validateVibeCheckForm(formData, locationVerification);
-    
+    const validation = VibeCheckValidator.validateVibeCheckForm(
+      formData,
+      locationVerification
+    );
+
     if (!validation.isValid) {
-      const validationSummary = VibeCheckValidator.getValidationSummary(validation);
+      const validationSummary =
+        VibeCheckValidator.getValidationSummary(validation);
       Alert.alert(
         "Please Fix the Following Issues",
-        validationSummary.allMessages.join('\n'),
+        validationSummary.allMessages.join("\n"),
         [{ text: "OK" }]
       );
       return;
@@ -140,20 +171,20 @@ const VibeCheckForm: React.FC<VibeCheckFormProps> = ({
       await onSubmit(formData);
     } catch (error) {
       // Let parent component handle the error through props
-      console.error('Form submission error:', error);
+      console.error("Form submission error:", error);
     }
   };
 
   const handleRetry = async () => {
     setIsRetrying(true);
     setLocalError(null);
-    
+
     try {
       if (onRetry) {
         await onRetry();
       }
     } catch (error) {
-      console.error('Retry failed:', error);
+      console.error("Retry failed:", error);
     } finally {
       setIsRetrying(false);
     }
@@ -180,7 +211,7 @@ const VibeCheckForm: React.FC<VibeCheckFormProps> = ({
 
       // Launch image picker
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: "images",
         allowsEditing: true,
         aspect: [4, 3],
         quality: 0.8,
@@ -195,6 +226,7 @@ const VibeCheckForm: React.FC<VibeCheckFormProps> = ({
         });
       }
     } catch (error) {
+      console.error(error);
       Alert.alert("Error", "Failed to select photo. Please try again.", [
         { text: "OK" },
       ]);
@@ -232,6 +264,7 @@ const VibeCheckForm: React.FC<VibeCheckFormProps> = ({
         });
       }
     } catch (error) {
+      console.error(error);
       Alert.alert("Error", "Failed to take photo. Please try again.", [
         { text: "OK" },
       ]);
@@ -266,15 +299,19 @@ const VibeCheckForm: React.FC<VibeCheckFormProps> = ({
     } else {
       return {
         icon: "location-outline" as const,
-        color: Colors.light.muted,
+        color: colors.muted,
         text: "Verifying location...",
       };
     }
   };
 
   const locationStatus = getLocationStatus();
-  const isFormValid = validationResult.isValid && locationVerified && 
+  const isFormValid =
+    validationResult.isValid &&
+    locationVerified &&
     (rateLimitInfo ? rateLimitInfo.canPost : true);
+
+  const styles = getStyles(colors);
 
   return (
     <ThemedView style={styles.container}>
@@ -291,18 +328,55 @@ const VibeCheckForm: React.FC<VibeCheckFormProps> = ({
         </View>
 
         {/* Location Status */}
-        <View style={styles.locationStatus}>
-          <Ionicons
-            name={locationStatus.icon}
-            size={20}
-            color={locationStatus.color}
-          />
-          <ThemedText
-            style={[styles.locationText, { color: locationStatus.color }]}
-          >
-            {locationStatus.text}
-          </ThemedText>
-        </View>
+        {!locationVerified && distanceToVenue !== undefined ? (
+          <View style={styles.distanceCard}>
+            <View style={styles.distanceHeader}>
+              <View style={styles.distanceIconContainer}>
+                <Ionicons name="location" size={18} color={colors.muted} />
+              </View>
+              <View style={styles.distanceInfo}>
+                <ThemedText style={styles.distanceTitle}>
+                  You are {Math.round(distanceToVenue)}m from venue
+                </ThemedText>
+                <ThemedText style={styles.distanceSubtitle}>
+                  You need to be within 100m to post vibe checks
+                </ThemedText>
+              </View>
+            </View>
+            <View style={styles.distanceProgressContainer}>
+              <View style={styles.distanceProgressBar}>
+                <View
+                  style={[
+                    styles.distanceProgressFill,
+                    {
+                      width: `${Math.min((100 / distanceToVenue) * 100, 100)}%`,
+                      backgroundColor:
+                        distanceToVenue > 100
+                          ? colors.destructive
+                          : colors.tint,
+                    },
+                  ]}
+                />
+              </View>
+              <ThemedText style={styles.distanceProgressText}>
+                {distanceToVenue > 100 ? "Too far" : "Close enough"}
+              </ThemedText>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.locationStatus}>
+            <Ionicons
+              name={locationStatus.icon}
+              size={20}
+              color={locationStatus.color}
+            />
+            <ThemedText
+              style={[styles.locationText, { color: locationStatus.color }]}
+            >
+              {locationStatus.text}
+            </ThemedText>
+          </View>
+        )}
 
         {/* Error Display */}
         {(error || localError) && (
@@ -315,15 +389,17 @@ const VibeCheckForm: React.FC<VibeCheckFormProps> = ({
         )}
 
         {/* Rate Limiting Countdown */}
-        {rateLimitInfo && !rateLimitInfo.canPost && rateLimitInfo.timeUntilReset && (
-          <RateLimitCountdown
-            venueId={venue.id}
-            timeUntilReset={rateLimitInfo.timeUntilReset}
-            onComplete={() => {
-              // Parent component should refresh rate limit info
-            }}
-          />
-        )}
+        {rateLimitInfo &&
+          !rateLimitInfo.canPost &&
+          rateLimitInfo.timeUntilReset && (
+            <RateLimitCountdown
+              venueId={venue.id}
+              timeUntilReset={rateLimitInfo.timeUntilReset}
+              onComplete={() => {
+                // Parent component should refresh rate limit info
+              }}
+            />
+          )}
 
         {/* Busyness Rating */}
         <View style={styles.section}>
@@ -334,7 +410,7 @@ const VibeCheckForm: React.FC<VibeCheckFormProps> = ({
             <StarRating
               rating={busynessRating}
               size={32}
-              color={Colors.light.tint}
+              color={colors.tint}
               onRate={(rating) => setBusynessRating(rating as BusynessRating)}
             />
             <ThemedText style={styles.ratingLabel}>
@@ -354,7 +430,7 @@ const VibeCheckForm: React.FC<VibeCheckFormProps> = ({
               comment.length > 280 && styles.commentInputError,
             ]}
             placeholder="Share what's happening right now..."
-            placeholderTextColor={Colors.light.muted}
+            placeholderTextColor={colors.muted}
             value={comment}
             onChangeText={setComment}
             maxLength={280}
@@ -363,7 +439,7 @@ const VibeCheckForm: React.FC<VibeCheckFormProps> = ({
             textAlignVertical="top"
           />
           <View style={styles.commentFooter}>
-            <ThemedText 
+            <ThemedText
               style={[
                 styles.characterCount,
                 comment.length > 280 && styles.characterCountError,
@@ -405,10 +481,7 @@ const VibeCheckForm: React.FC<VibeCheckFormProps> = ({
               {uploadProgress && (
                 <View style={styles.uploadProgressOverlay}>
                   <View style={styles.uploadProgressContainer}>
-                    <ActivityIndicator
-                      size="small"
-                      color={Colors.light.background}
-                    />
+                    <ActivityIndicator size="small" color={colors.background} />
                     <ThemedText style={styles.uploadProgressText}>
                       Uploading... {Math.round(uploadProgress.percentage)}%
                     </ThemedText>
@@ -435,14 +508,14 @@ const VibeCheckForm: React.FC<VibeCheckFormProps> = ({
             >
               {isUploadingPhoto ? (
                 <>
-                  <ActivityIndicator size="small" color={Colors.light.tint} />
+                  <ActivityIndicator size="small" color={colors.tint} />
                   <ThemedText style={styles.addPhotoText}>
                     Processing...
                   </ThemedText>
                 </>
               ) : (
                 <>
-                  <Ionicons name="camera" size={24} color={Colors.light.tint} />
+                  <Ionicons name="camera" size={24} color={colors.tint} />
                   <ThemedText style={styles.addPhotoText}>Add Photo</ThemedText>
                 </>
               )}
@@ -464,13 +537,22 @@ const VibeCheckForm: React.FC<VibeCheckFormProps> = ({
         <TouchableOpacity
           style={[
             styles.submitButton,
-            (!isFormValid || isSubmitting) && styles.submitButtonDisabled,
+            !locationVerified && !isSubmitting && styles.submitButtonFar,
+            (isSubmitting || (rateLimitInfo && !rateLimitInfo.canPost)) &&
+              styles.submitButtonDisabled,
           ]}
           onPress={handleSubmit}
-          disabled={!isFormValid || isSubmitting}
+          disabled={isSubmitting || (rateLimitInfo && !rateLimitInfo.canPost)}
         >
           {isSubmitting ? (
-            <ActivityIndicator size="small" color={Colors.light.background} />
+            <ActivityIndicator size="small" color={colors.background} />
+          ) : !locationVerified ? (
+            <View style={styles.submitButtonContent}>
+              <ThemedText style={styles.submitButtonEmoji}>😢</ThemedText>
+              <ThemedText style={styles.submitButtonFarText}>
+                You are far from the venue
+              </ThemedText>
+            </View>
           ) : (
             <ThemedText style={styles.submitButtonText}>
               Post Vibe Check
@@ -482,197 +564,282 @@ const VibeCheckForm: React.FC<VibeCheckFormProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.light.background,
-  },
-  scrollView: {
-    flex: 1,
-    padding: 20,
-  },
-  header: {
-    marginBottom: 20,
-  },
-  title: {
-    marginBottom: 4,
-  },
-  venueText: {
-    fontSize: 16,
-    color: Colors.light.muted,
-  },
-  locationStatus: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: Colors.light.surface,
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 24,
-  },
-  locationText: {
-    marginLeft: 8,
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    marginBottom: 12,
-    fontSize: 16,
-  },
-  ratingContainer: {
-    alignItems: "center",
-    padding: 16,
-    backgroundColor: Colors.light.surface,
-    borderRadius: 12,
-  },
-  ratingLabel: {
-    marginTop: 8,
-    fontSize: 18,
-    fontWeight: "600",
-    color: Colors.light.tint,
-  },
-  commentInput: {
-    backgroundColor: Colors.light.surface,
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    color: Colors.light.text,
-    minHeight: 100,
-    borderWidth: 1,
-    borderColor: Colors.light.border,
-  },
-  characterCount: {
-    textAlign: "right",
-    marginTop: 4,
-    fontSize: 12,
-    color: Colors.light.muted,
-  },
-  photoContainer: {
-    position: "relative",
-  },
-  photoPreview: {
-    width: "100%",
-    height: 200,
-    borderRadius: 12,
-  },
-  removePhotoButton: {
-    position: "absolute",
-    top: 8,
-    right: 8,
-    backgroundColor: Colors.light.background,
-    borderRadius: 12,
-  },
-  addPhotoButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Colors.light.surface,
-    borderRadius: 12,
-    padding: 20,
-    borderWidth: 2,
-    borderColor: Colors.light.border,
-    borderStyle: "dashed",
-  },
-  addPhotoText: {
-    marginLeft: 8,
-    fontSize: 16,
-    color: Colors.light.tint,
-    fontWeight: "500",
-  },
-  addPhotoButtonDisabled: {
-    opacity: 0.6,
-  },
-  uploadProgressOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  uploadProgressContainer: {
-    alignItems: "center",
-    padding: 20,
-  },
-  uploadProgressText: {
-    color: Colors.light.background,
-    fontSize: 14,
-    fontWeight: "500",
-    marginTop: 8,
-    marginBottom: 12,
-  },
-  progressBar: {
-    width: 120,
-    height: 4,
-    backgroundColor: "rgba(255, 255, 255, 0.3)",
-    borderRadius: 2,
-    overflow: "hidden",
-  },
-  progressBarFill: {
-    height: "100%",
-    backgroundColor: Colors.light.background,
-    borderRadius: 2,
-  },
-  actionButtons: {
-    flexDirection: "row",
-    padding: 20,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: Colors.light.border,
-    gap: 12,
-  },
-  cancelButton: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.light.border,
-    alignItems: "center",
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: Colors.light.text,
-  },
-  submitButton: {
-    flex: 2,
-    padding: 16,
-    borderRadius: 12,
-    backgroundColor: Colors.light.tint,
-    alignItems: "center",
-  },
-  submitButtonDisabled: {
-    backgroundColor: Colors.light.muted,
-  },
-  submitButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: Colors.light.background,
-  },
-  commentInputError: {
-    borderColor: Colors.semantic.error,
-    borderWidth: 2,
-  },
-  commentFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 4,
-  },
-  characterCountError: {
-    color: Colors.semantic.error,
-    fontWeight: "600",
-  },
-  validationError: {
-    fontSize: 12,
-    color: Colors.semantic.error,
-    fontWeight: "500",
-  },
-});
+const getStyles = (colors: typeof Colors.dark) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    scrollView: {
+      flex: 1,
+      padding: 20,
+    },
+    header: {
+      marginBottom: 20,
+    },
+    title: {
+      marginBottom: 4,
+    },
+    venueText: {
+      fontSize: 16,
+      color: colors.muted,
+    },
+    locationStatus: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: colors.surface,
+      padding: 12,
+      borderRadius: 8,
+      marginBottom: 24,
+    },
+    locationText: {
+      marginLeft: 8,
+      fontSize: 14,
+      fontWeight: "500",
+    },
+    distanceCard: {
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 24,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    distanceHeader: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      marginBottom: 12,
+    },
+    distanceIconContainer: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: `${colors.muted}20`,
+      alignItems: "center",
+      justifyContent: "center",
+      marginRight: 12,
+    },
+    distanceInfo: {
+      flex: 1,
+    },
+    distanceTitle: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: colors.text,
+      marginBottom: 2,
+    },
+    distanceSubtitle: {
+      fontSize: 12,
+      color: colors.muted,
+      lineHeight: 16,
+    },
+    distanceProgressContainer: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+    },
+    distanceProgressBar: {
+      flex: 1,
+      height: 6,
+      backgroundColor: `${colors.muted}30`,
+      borderRadius: 3,
+      overflow: "hidden",
+    },
+    distanceProgressFill: {
+      height: "100%",
+      borderRadius: 3,
+    },
+    distanceProgressText: {
+      fontSize: 11,
+      fontWeight: "500",
+      color: colors.muted,
+      minWidth: 60,
+      textAlign: "right",
+    },
+    section: {
+      marginBottom: 24,
+    },
+    sectionTitle: {
+      marginBottom: 12,
+      fontSize: 16,
+      color: colors.text,
+    },
+    ratingContainer: {
+      alignItems: "center",
+      padding: 16,
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+    },
+    ratingLabel: {
+      marginTop: 8,
+      fontSize: 18,
+      fontWeight: "600",
+      color: colors.tint,
+    },
+    commentInput: {
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      padding: 16,
+      fontSize: 16,
+      color: colors.text,
+      minHeight: 100,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    characterCount: {
+      textAlign: "right",
+      marginTop: 4,
+      fontSize: 12,
+      color: colors.muted,
+    },
+    photoContainer: {
+      position: "relative",
+    },
+    photoPreview: {
+      width: "100%",
+      height: 200,
+      borderRadius: 12,
+    },
+    removePhotoButton: {
+      position: "absolute",
+      top: 8,
+      right: 8,
+      backgroundColor: colors.background,
+      borderRadius: 12,
+    },
+    addPhotoButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      padding: 20,
+      borderWidth: 2,
+      borderColor: colors.border,
+      borderStyle: "dashed",
+    },
+    addPhotoText: {
+      marginLeft: 8,
+      fontSize: 16,
+      color: colors.tint,
+      fontWeight: "500",
+    },
+    addPhotoButtonDisabled: {
+      opacity: 0.6,
+    },
+    uploadProgressOverlay: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: "rgba(0, 0, 0, 0.7)",
+      borderRadius: 12,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    uploadProgressContainer: {
+      alignItems: "center",
+      padding: 20,
+    },
+    uploadProgressText: {
+      color: colors.background,
+      fontSize: 14,
+      fontWeight: "500",
+      marginTop: 8,
+      marginBottom: 12,
+    },
+    progressBar: {
+      width: 120,
+      height: 4,
+      backgroundColor: "rgba(255, 255, 255, 0.3)",
+      borderRadius: 2,
+      overflow: "hidden",
+    },
+    progressBarFill: {
+      height: "100%",
+      backgroundColor: colors.background,
+      borderRadius: 2,
+    },
+    actionButtons: {
+      flexDirection: "row",
+      padding: 20,
+      paddingTop: 16,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+      gap: 12,
+    },
+    cancelButton: {
+      paddingVertical: 10,
+      paddingHorizontal: 18,
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: "center",
+      minWidth: 70,
+    },
+    cancelButtonText: {
+      fontSize: 15,
+      fontWeight: "600",
+      paddingTop:"auto",
+      color: colors.text,
+    },
+    submitButton: {
+      flex: 1,
+      paddingVertical: 10,
+      paddingHorizontal: 18,
+      borderRadius: 20,
+      backgroundColor: colors.tint,
+      alignItems: "center",
+      justifyContent: "center",
+      minHeight: 40,
+    },
+    submitButtonDisabled: {
+      backgroundColor: colors.muted,
+    },
+    submitButtonFar: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    submitButtonContent: {
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    submitButtonEmoji: {
+      fontSize: 18,
+      marginBottom: 2,
+    },
+    submitButtonFarText: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: colors.muted,
+      textAlign: "center",
+    },
+    submitButtonText: {
+      fontSize: 15,
+      fontWeight: "600",
+      color: colors.background,
+    },
+    commentInputError: {
+      borderColor: Colors.semantic.error,
+      borderWidth: 2,
+    },
+    commentFooter: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginTop: 4,
+    },
+    characterCountError: {
+      color: Colors.semantic.error,
+      fontWeight: "600",
+    },
+    validationError: {
+      fontSize: 12,
+      color: Colors.semantic.error,
+      fontWeight: "500",
+    },
+  });
 
 export default VibeCheckForm;

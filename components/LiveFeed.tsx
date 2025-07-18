@@ -220,7 +220,7 @@ const LiveFeed: React.FC<LiveFeedProps> = ({
         No Live Vibes Yet
       </ThemedText>
       <ThemedText style={[styles.emptySubtitle, { color: colors.muted }]}>
-        Be the first to share what's happening at a venue! Pull down to refresh and check for new updates.
+        Be the first to share what&apos;s happening at a venue! Pull down to refresh and check for new updates.
       </ThemedText>
     </View>
   );

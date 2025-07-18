@@ -28,16 +28,22 @@ export class ConnectivityManager {
 
     try {
       const netInfoState = await NetInfo.fetch();
-      const connected = netInfoState.isConnected && netInfoState.isInternetReachable;
+      
+      // More robust connectivity check
+      // isInternetReachable can be null, so we handle that case
+      const connected = netInfoState.isConnected === true && 
+        (netInfoState.isInternetReachable === true || netInfoState.isInternetReachable === null);
       
       // Update cache
-      this.isConnectedCache = connected ?? false;
+      this.isConnectedCache = connected;
       this.lastCheckTime = now;
       
       return this.isConnectedCache;
     } catch (error) {
       console.warn('Network connectivity check failed:', error);
-      // If check fails, assume connected (fail open)
+      // If check fails, assume connected (fail open) to avoid false offline errors
+      this.isConnectedCache = true;
+      this.lastCheckTime = now;
       return true;
     }
   }
@@ -64,10 +70,12 @@ export class ConnectivityManager {
     callback: (isConnected: boolean) => void
   ): () => void {
     const unsubscribe = NetInfo.addEventListener(state => {
-      const connected = state.isConnected && state.isInternetReachable;
+      // Use the same robust connectivity check as isConnected()
+      const connected = state.isConnected === true && 
+        (state.isInternetReachable === true || state.isInternetReachable === null);
       
       // Update cache
-      this.isConnectedCache = connected ?? false;
+      this.isConnectedCache = connected;
       this.lastCheckTime = Date.now();
       
       callback(this.isConnectedCache);

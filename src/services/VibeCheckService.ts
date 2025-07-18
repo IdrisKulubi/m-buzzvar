@@ -158,27 +158,37 @@ export class VibeCheckService {
         return { data: cachedData, error: null };
       }
 
-      // Check network connectivity
-      const isConnected = await ConnectivityManager.isConnected();
-      if (!isConnected) {
-        return { data: [], error: ErrorFactory.networkOffline() };
+      // Try to fetch data first, then check connectivity only if it fails
+      try {
+        // Use optimized query service
+        const { data: vibeChecks, error } = await OptimizedQueryService.getVenueVibeChecksOptimized(
+          venueId,
+          hoursBack
+        );
+
+        if (error) {
+          // If there's a database error, check if it's a connectivity issue
+          const isConnected = await ConnectivityManager.isConnected();
+          if (!isConnected) {
+            return { data: [], error: ErrorFactory.networkOffline() };
+          }
+          
+          const appError = error instanceof Error ? ErrorParser.parseError(error) : error as AppError;
+          return { data: [], error: appError };
+        }
+
+        // Cache the results
+        await VibeCheckCacheService.cacheVenueVibeChecks(venueId, hoursBack, vibeChecks);
+
+        return { data: vibeChecks, error: null };
+      } catch (networkError) {
+        // Only check connectivity if the actual request failed
+        const isConnected = await ConnectivityManager.isConnected();
+        if (!isConnected) {
+          return { data: [], error: ErrorFactory.networkOffline() };
+        }
+        throw networkError; // Re-throw if it's not a connectivity issue
       }
-
-      // Use optimized query service
-      const { data: vibeChecks, error } = await OptimizedQueryService.getVenueVibeChecksOptimized(
-        venueId,
-        hoursBack
-      );
-
-      if (error) {
-        const appError = error instanceof Error ? ErrorParser.parseError(error) : error as AppError;
-        return { data: [], error: appError };
-      }
-
-      // Cache the results
-      await VibeCheckCacheService.cacheVenueVibeChecks(venueId, hoursBack, vibeChecks);
-
-      return { data: vibeChecks, error: null };
     } catch (error) {
       console.error('Failed to fetch venue vibe checks:', error);
       const appError = error instanceof Error ? ErrorParser.parseError(error) : error as AppError;
