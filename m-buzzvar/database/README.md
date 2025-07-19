@@ -80,9 +80,48 @@ After running the schema and seed data:
 3. Test authentication by creating a user account
 4. Confirm RLS policies are working by testing data access
 
+## Migrations
+
+The database uses a migration system to manage schema changes:
+
+### Available Migrations
+
+1. **001_add_vibe_checks.sql** - Adds vibe checks functionality
+2. **002_performance_optimizations.sql** - Performance improvements
+3. **003_web_portal_extensions.sql** - Web admin portal support
+
+### Running Migrations
+
+To apply the latest migration for web portal support:
+
+```sql
+-- In Supabase SQL Editor
+\i migrations/003_web_portal_extensions.sql
+```
+
+Or use the deployment script:
+
+```sql
+-- Deploy with testing
+\i deploy_web_portal_extensions.sql
+```
+
+### Web Portal Extensions (Migration 003)
+
+The web portal migration adds:
+
+- **venue_owners** table for venue ownership management
+- **Analytics views** for venue and platform statistics
+- **Helper functions** for venue management
+- **Enhanced RLS policies** for role-based access
+- **Performance indexes** for analytics queries
+
+See `migrations/003_web_portal_extensions_README.md` for detailed documentation.
+
 ## Next Steps
 
 1. Set up the mobile app with the database credentials
 2. Test the authentication flow
 3. Implement the TikTok-style feed using the venues data
-4. Add real venue data for your target location 
+4. Add real venue data for your target location
+5. Deploy web portal extensions for admin functionality 

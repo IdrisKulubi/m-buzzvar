@@ -12,8 +12,14 @@ import {
   Settings, 
   Users, 
   Shield,
-  Megaphone
+  Megaphone,
+  Menu,
+  X
 } from 'lucide-react'
+import { useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
+import { ScrollArea } from '@/components/ui/scroll-area'
 
 interface SidebarProps {
   userRole: UserWithRole
@@ -71,7 +77,7 @@ const navItems: NavItem[] = [
   }
 ]
 
-export function Sidebar({ userRole }: SidebarProps) {
+function SidebarContent({ userRole, onLinkClick }: { userRole: UserWithRole; onLinkClick?: () => void }) {
   const pathname = usePathname()
 
   const filteredNavItems = navItems.filter(item => 
@@ -79,7 +85,7 @@ export function Sidebar({ userRole }: SidebarProps) {
   )
 
   return (
-    <div className="w-64 bg-card border-r">
+    <div className="flex flex-col h-full">
       <div className="p-6">
         <div className="flex items-center gap-2 mb-8">
           <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
@@ -97,6 +103,7 @@ export function Sidebar({ userRole }: SidebarProps) {
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={onLinkClick}
                 className={cn(
                   'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
                   isActive 
@@ -110,26 +117,67 @@ export function Sidebar({ userRole }: SidebarProps) {
             )
           })}
         </nav>
-        
-        {userRole.role === 'venue_owner' && userRole.venues && (
-          <div className="mt-8">
-            <h3 className="text-sm font-medium text-muted-foreground mb-3">
-              My Venues
-            </h3>
+      </div>
+      
+      {userRole.role === 'venue_owner' && userRole.venues && userRole.venues.length > 0 && (
+        <div className="px-6 pb-6 mt-auto">
+          <h3 className="text-sm font-medium text-muted-foreground mb-3">
+            My Venues
+          </h3>
+          <ScrollArea className="max-h-48">
             <div className="space-y-1">
               {userRole.venues.map((venue) => (
                 <Link
                   key={venue.venue_id}
                   href={`/dashboard/venue/${venue.venue_id}`}
-                  className="block px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+                  onClick={onLinkClick}
+                  className={cn(
+                    'block px-3 py-2 text-sm rounded-lg transition-colors',
+                    pathname === `/dashboard/venue/${venue.venue_id}`
+                      ? 'bg-muted text-foreground'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                  )}
                 >
                   {venue.venue.name}
                 </Link>
               ))}
             </div>
-          </div>
-        )}
-      </div>
+          </ScrollArea>
+        </div>
+      )}
     </div>
+  )
+}
+
+export function Sidebar({ userRole }: SidebarProps) {
+  const [mobileOpen, setMobileOpen] = useState(false)
+
+  return (
+    <>
+      {/* Desktop Sidebar */}
+      <div className="hidden lg:flex lg:w-64 lg:flex-col lg:fixed lg:inset-y-0 lg:z-50 lg:bg-card lg:border-r">
+        <SidebarContent userRole={userRole} />
+      </div>
+
+      {/* Mobile Sidebar */}
+      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+        <SheetTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="lg:hidden fixed top-4 left-4 z-40"
+          >
+            <Menu className="h-6 w-6" />
+            <span className="sr-only">Open sidebar</span>
+          </Button>
+        </SheetTrigger>
+        <SheetContent side="left" className="p-0 w-64">
+          <SidebarContent 
+            userRole={userRole} 
+            onLinkClick={() => setMobileOpen(false)} 
+          />
+        </SheetContent>
+      </Sheet>
+    </>
   )
 }
