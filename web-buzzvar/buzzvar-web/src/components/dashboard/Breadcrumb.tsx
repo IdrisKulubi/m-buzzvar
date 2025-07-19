@@ -18,12 +18,12 @@ export function Breadcrumb() {
     const breadcrumbs: BreadcrumbItem[] = []
     
     // Always start with Dashboard
-    breadcrumbs.push({ label: 'Dashboard', href: '/dashboard' })
+    breadcrumbs.push({ label: 'Dashboard', href: '/' })
     
-    // Skip the first 'dashboard' segment
-    const pathSegments = segments.slice(1)
+    // Process all path segments
+    const pathSegments = segments
     
-    let currentPath = '/dashboard'
+    let currentPath = ''
     
     pathSegments.forEach((segment, index) => {
       currentPath += `/${segment}`

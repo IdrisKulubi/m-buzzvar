@@ -4,7 +4,18 @@ import { UserWithRole, UserRole } from './types'
 // Admin email configuration - will be moved to environment variables
 const ADMIN_EMAILS = process.env.ADMIN_EMAILS?.split(',') || []
 
-export async function getUserRole(userId: string, email: string): Promise<UserWithRole> {
+export async function getUserRole(email: string): Promise<UserWithRole> {
+  const supabase = await createServerSupabaseClient()
+  
+  // Get current user session to get userId
+  const { data: { session } } = await supabase.auth.getSession()
+  
+  if (!session?.user) {
+    throw new Error('No authenticated user')
+  }
+  
+  const userId = session.user.id
+
   // Check if user is admin
   if (ADMIN_EMAILS.includes(email)) {
     return {
@@ -14,8 +25,6 @@ export async function getUserRole(userId: string, email: string): Promise<UserWi
       role: 'admin'
     }
   }
-
-  const supabase = await createServerSupabaseClient()
 
   // Check if user owns any venues
   const { data: venueOwnership, error } = await supabase
@@ -59,7 +68,7 @@ export async function getCurrentUser(): Promise<UserWithRole | null> {
     return null
   }
 
-  const userRole = await getUserRole(session.user.id, session.user.email!)
+  const userRole = await getUserRole(session.user.email!)
   
   // Get user profile information
   const { data: profile } = await supabase

@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ user: null }, { status: 401 })
     }
 
-    const userWithRole = await getUserRole(session.user.id, session.user.email!)
+    const userWithRole = await getUserRole(session.user.email!)
     
     // Get user profile information
     const { data: profile } = await supabase

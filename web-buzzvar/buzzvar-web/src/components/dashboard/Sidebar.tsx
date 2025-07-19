@@ -35,43 +35,43 @@ interface NavItem {
 const navItems: NavItem[] = [
   {
     title: 'Dashboard',
-    href: '/dashboard',
+    href: '/',
     icon: Home,
     roles: ['admin', 'venue_owner', 'user']
   },
   {
     title: 'Venue Management',
-    href: '/dashboard/venue',
+    href: '/venue',
     icon: Building2,
     roles: ['admin', 'venue_owner']
   },
   {
     title: 'Promotions',
-    href: '/dashboard/promotions',
+    href: '/promotions',
     icon: Megaphone,
     roles: ['admin', 'venue_owner']
   },
   {
     title: 'Analytics',
-    href: '/dashboard/analytics',
+    href: '/analytics',
     icon: BarChart3,
     roles: ['admin', 'venue_owner']
   },
   {
     title: 'Admin Panel',
-    href: '/dashboard/admin',
+    href: '/admin',
     icon: Shield,
     roles: ['admin']
   },
   {
     title: 'User Management',
-    href: '/dashboard/admin/users',
+    href: '/admin/users',
     icon: Users,
     roles: ['admin']
   },
   {
     title: 'Venue Management',
-    href: '/dashboard/admin/venues',
+    href: '/admin/venues',
     icon: Building2,
     roles: ['admin']
   }
@@ -129,11 +129,11 @@ function SidebarContent({ userRole, onLinkClick }: { userRole: UserWithRole; onL
               {userRole.venues.map((venue) => (
                 <Link
                   key={venue.venue_id}
-                  href={`/dashboard/venue/${venue.venue_id}`}
+                  href={`/venue/${venue.venue_id}`}
                   onClick={onLinkClick}
                   className={cn(
                     'block px-3 py-2 text-sm rounded-lg transition-colors',
-                    pathname === `/dashboard/venue/${venue.venue_id}`
+                    pathname === `/venue/${venue.venue_id}`
                       ? 'bg-muted text-foreground'
                       : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                   )}

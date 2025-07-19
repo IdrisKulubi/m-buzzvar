@@ -29,19 +29,19 @@ export function ProtectedRoute({
     if (!loading && user && requiredRole) {
       // Check role-based access
       if (requiredRole === 'admin' && user.role !== 'admin') {
-        router.push('/dashboard')
+        router.push('/')
         return
       }
 
       if (requiredRole === 'venue_owner' && user.role !== 'venue_owner' && user.role !== 'admin') {
-        router.push('/dashboard')
+        router.push('/')
         return
       }
 
       // Check venue-specific access
       if (venueId && user.role !== 'admin') {
         if (user.role !== 'venue_owner' || !user.venues?.some(v => v.venue_id === venueId)) {
-          router.push('/dashboard')
+          router.push('/')
           return
         }
       }
@@ -57,12 +57,12 @@ export function ProtectedRoute({
   }
 
   if (requiredRole && user.role !== requiredRole && user.role !== 'admin') {
-    return null // Will redirect to dashboard
+    return null // Will redirect to home
   }
 
   if (venueId && user.role !== 'admin') {
     if (user.role !== 'venue_owner' || !user.venues?.some(v => v.venue_id === venueId)) {
-      return null // Will redirect to dashboard
+      return null // Will redirect to home
     }
   }
 
