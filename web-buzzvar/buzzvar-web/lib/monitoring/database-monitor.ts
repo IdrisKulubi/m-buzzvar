@@ -1,4 +1,4 @@
-import { checkDatabaseHealth, pool } from '../database/neon-client'
+import { checkDatabaseHealth, pool } from "@/lib/database/neon-client"
 
 interface DatabaseMetrics {
   timestamp: string

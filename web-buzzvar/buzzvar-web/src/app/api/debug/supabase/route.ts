@@ -1,26 +1,28 @@
-import { createServerSupabaseClient } from '@/lib/supabase'
 import { NextRequest, NextResponse } from 'next/server'
+import { withApiHandler, createApiResponse, handleApiError, AuthenticatedRequest } from '@/lib/api/middleware'
+import { auth } from '@/lib/auth/better-auth-server'
+import { headers } from 'next/headers'
 
-export async function GET(request: NextRequest) {
+export const GET = withApiHandler(async (request: AuthenticatedRequest) => {
   try {
-    const supabase = await createServerSupabaseClient()
+    // Test Better Auth session
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    })
     
-    // Test the connection
-    const { data, error } = await supabase.auth.getSession()
-    
-    return NextResponse.json({
+    return createApiResponse({
       success: true,
-      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
-      hasAnonKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-      sessionError: error?.message || null,
-      hasSession: !!data.session,
+      authSystem: 'Better Auth',
+      neonDbUrl: process.env.NEON_DATABASE_URL ? 'configured' : 'missing',
+      hasSession: !!session,
+      sessionUser: session ? {
+        id: session.user.id,
+        email: session.user.email,
+        name: session.user.name
+      } : null,
       timestamp: new Date().toISOString()
     })
   } catch (error) {
-    return NextResponse.json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-      timestamp: new Date().toISOString()
-    }, { status: 500 })
+    return handleApiError(error, 'Auth Debug')
   }
-}
+}, { requireAuth: false, requireDatabase: false })

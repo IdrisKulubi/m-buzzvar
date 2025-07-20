@@ -9,12 +9,12 @@ function getPool(): Pool {
   if (!poolInstance) {
     poolInstance = new Pool({
       connectionString: process.env.NEON_DATABASE_URL,
-      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-      max: parseInt(process.env.DB_POOL_MAX || '20'),
-      idleTimeoutMillis: parseInt(process.env.DB_POOL_IDLE_TIMEOUT || '30000'),
-      connectionTimeoutMillis: parseInt(process.env.DB_POOL_CONNECTION_TIMEOUT || '2000'),
-      statement_timeout: 30000, // 30 second statement timeout
-      query_timeout: 30000, // 30 second query timeout
+      ssl: { rejectUnauthorized: false }, // Always use SSL for Neon
+      max: parseInt(process.env.DB_POOL_MAX || '10'),
+      idleTimeoutMillis: parseInt(process.env.DB_POOL_IDLE_TIMEOUT || '10000'),
+      connectionTimeoutMillis: parseInt(process.env.DB_POOL_CONNECTION_TIMEOUT || '5000'),
+      statement_timeout: 10000, // 10 second statement timeout
+      query_timeout: 10000, // 10 second query timeout
     })
 
     // Connection pool event listeners for monitoring

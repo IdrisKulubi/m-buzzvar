@@ -8,7 +8,7 @@ import {
   User,
 } from "../lib/types";
 import { LocationVerificationService } from "./LocationVerificationService";
-import { PhotoUploadService, PhotoUploadProgress } from "./PhotoUploadService";
+import { PhotoUploadServiceR2, PhotoUploadProgress } from "./PhotoUploadServiceR2";
 import { ErrorFactory, AppError, RetryManager, ErrorParser } from "../lib/errors";
 import { ConnectivityManager } from "../lib/connectivity";
 import { VibeCheckCacheService } from "./CacheService";
@@ -254,7 +254,7 @@ export class VibeCheckService {
     onProgress?: (progress: PhotoUploadProgress) => void
   ): Promise<{ data: string | null; error: any }> {
     try {
-      const result = await PhotoUploadService.uploadPhoto(photo, userId, {
+      const result = await PhotoUploadServiceR2.uploadPhoto(photo, userId, {
         quality: 0.8,
         maxWidth: 1200,
         maxHeight: 1200,

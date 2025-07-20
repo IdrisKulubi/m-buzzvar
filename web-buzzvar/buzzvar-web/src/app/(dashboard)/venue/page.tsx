@@ -4,5 +4,5 @@ export default function VenuePage() {
     <div className="p-6">
       <h1 className="text-2xl font-bold">Venue Dashboard</h1>
     </div>
-  )
+  );
 }

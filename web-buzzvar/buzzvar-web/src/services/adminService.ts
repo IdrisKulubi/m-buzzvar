@@ -1,103 +1,79 @@
-import { createClient } from '@/lib/supabase'
-import { PlatformAnalytics, UserManagement, UserFilters, VenueFilters, GrowthData, EngagementData } from '@/lib/types'
-import { Database } from '@/lib/types'
-
-type Venue = Database['public']['Tables']['venues']['Row']
+import { adminService, analyticsService, type UserFilters, type UserManagement, type GrowthData, type EngagementData, type PlatformAnalytics } from '@/lib/database/services'
+import type { User, Venue } from '@/lib/database/schema'
 
 export class AdminService {
-  static async getPlatformAnalytics(): Promise<PlatformAnalytics> {
-    const supabase = createClient()
+  static async getPlatformAnalytics(period: string = '30d'): Promise<PlatformAnalytics> {
+    return await analyticsService.getPlatformAnalytics(period)
+  }
 
-    try {
-      // Get basic platform analytics from the view
-      const { data: basicAnalytics, error: basicError } = await supabase
-        .from('platform_analytics')
-        .select('*')
-        .single()
+  static async getUsers(filters?: UserFilters, limit: number = 50, offset: number = 0): Promise<UserManagement[]> {
+    return await adminService.getUsers(filters, limit, offset)
+  }
 
-      if (basicError) {
-        console.error('Error fetching basic platform analytics:', basicError)
-        throw new Error('Failed to fetch platform analytics')
-      }
+  static async getUserById(userId: string): Promise<UserManagement | null> {
+    return await adminService.getUserById(userId)
+  }
 
-      // Get detailed growth data for the last 90 days
-      const ninetyDaysAgo = new Date()
-      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90)
+  static async updateUser(userId: string, updates: {
+    name?: string
+    university?: string
+    is_active?: boolean
+  }): Promise<User> {
+    return await adminService.updateUser(userId, updates)
+  }
 
-      // User growth data
-      const { data: userGrowthData, error: userGrowthError } = await supabase
-        .from('users')
-        .select('created_at')
-        .gte('created_at', ninetyDaysAgo.toISOString())
-        .order('created_at', { ascending: true })
+  static async deleteUser(userId: string): Promise<void> {
+    return await adminService.deleteUser(userId)
+  }
 
-      if (userGrowthError) {
-        console.error('Error fetching user growth data:', userGrowthError)
-      }
+  static async getVenues(filters?: any, limit: number = 50, offset: number = 0): Promise<Venue[]> {
+    return await adminService.getVenues(filters, limit, offset)
+  }
 
-      // Venue growth data
-      const { data: venueGrowthData, error: venueGrowthError } = await supabase
-        .from('venues')
-        .select('created_at')
-        .gte('created_at', ninetyDaysAgo.toISOString())
-        .order('created_at', { ascending: true })
+  static async updateVenue(venueId: string, updates: {
+    is_verified?: boolean
+    is_active?: boolean
+  }): Promise<Venue> {
+    return await adminService.updateVenue(venueId, updates)
+  }
 
-      if (venueGrowthError) {
-        console.error('Error fetching venue growth data:', venueGrowthError)
-      }
+  static async getGrowthData(days: number = 30): Promise<GrowthData[]> {
+    return await adminService.getGrowthData(days)
+  }
 
-      // Process growth data
-      const userGrowth = this.processGrowthData(userGrowthData || [])
-      const venueGrowth = this.processGrowthData(venueGrowthData || [])
+  static async getEngagementData(days: number = 30): Promise<EngagementData[]> {
+    return await adminService.getEngagementData(days)
+  }
 
-      // Calculate engagement metrics
-      const engagementMetrics = await this.calculatePlatformEngagementMetrics()
-
-      return {
-        ...basicAnalytics,
-        user_growth: userGrowth,
-        venue_growth: venueGrowth,
-        engagement_metrics: engagementMetrics
-      }
-    } catch (error) {
-      console.error('Error in getPlatformAnalytics:', error)
-      throw error
-    }
+  static async getSystemStats(): Promise<{
+    totalUsers: number
+    activeUsers: number
+    totalVenues: number
+    activeVenues: number
+    verifiedVenues: number
+    pendingReports: number
+  }> {
+    return await adminService.getSystemStats()
   }
 
   static async getSystemHealthMetrics() {
-    const supabase = createClient()
-
     try {
-      // Database performance metrics
+      // Test database connectivity
       const startTime = Date.now()
-      
-      // Test query performance
-      const { data: testQuery, error: testError } = await supabase
-        .from('users')
-        .select('id')
-        .limit(1)
-
+      const healthCheck = await adminService.healthCheck()
       const queryTime = Date.now() - startTime
-
-      if (testError) {
-        console.error('Database health check failed:', testError)
-      }
 
       // Get recent error rates (simulated - in real app would come from logs)
       const errorRate = Math.random() * 2 // 0-2% error rate simulation
-
-      // Get active connections (simulated)
-      const activeConnections = Math.floor(Math.random() * 50) + 10
 
       // Storage usage (simulated)
       const storageUsed = Math.floor(Math.random() * 80) + 10 // 10-90% usage
 
       return {
         database: {
-          status: queryTime < 1000 ? 'healthy' : 'slow',
+          status: healthCheck.status === 'healthy' ? 'healthy' : 'unhealthy',
           response_time: queryTime,
-          active_connections: activeConnections
+          active_connections: healthCheck.connectionPool?.totalCount || 0
         },
         api: {
           status: errorRate < 1 ? 'healthy' : 'degraded',
@@ -133,39 +109,15 @@ export class AdminService {
   }
 
   static async getRealTimeMetrics() {
-    const supabase = createClient()
-
     try {
-      // Get metrics for the last hour
-      const oneHourAgo = new Date()
-      oneHourAgo.setHours(oneHourAgo.getHours() - 1)
-
-      // Recent vibe checks
-      const { data: recentVibeChecks, error: vibeError } = await supabase
-        .from('vibe_checks')
-        .select('id, created_at')
-        .gte('created_at', oneHourAgo.toISOString())
-
-      // Recent views
-      const { data: recentViews, error: viewsError } = await supabase
-        .from('club_views')
-        .select('id, created_at')
-        .gte('created_at', oneHourAgo.toISOString())
-
-      // Recent user registrations
-      const { data: recentUsers, error: usersError } = await supabase
-        .from('users')
-        .select('id, created_at')
-        .gte('created_at', oneHourAgo.toISOString())
-
-      if (vibeError || viewsError || usersError) {
-        console.error('Error fetching real-time metrics:', { vibeError, viewsError, usersError })
-      }
-
+      const stats = await this.getSystemStats()
+      
       return {
-        vibe_checks_last_hour: recentVibeChecks?.length || 0,
-        views_last_hour: recentViews?.length || 0,
-        new_users_last_hour: recentUsers?.length || 0,
+        vibe_checks_last_hour: 0, // Placeholder - would need hourly tracking
+        views_last_hour: 0, // Placeholder - would need hourly tracking
+        new_users_last_hour: 0, // Placeholder - would need hourly tracking
+        total_users: stats.totalUsers,
+        total_venues: stats.totalVenues,
         timestamp: new Date().toISOString()
       }
     } catch (error) {
@@ -174,126 +126,79 @@ export class AdminService {
         vibe_checks_last_hour: 0,
         views_last_hour: 0,
         new_users_last_hour: 0,
+        total_users: 0,
+        total_venues: 0,
         timestamp: new Date().toISOString()
       }
     }
   }
 
-  private static processGrowthData(data: any[]): GrowthData[] {
-    const dailyCounts: { [key: string]: number } = {}
-    
-    data.forEach(item => {
-      const dateStr = new Date(item.created_at).toISOString().split('T')[0]
-      dailyCounts[dateStr] = (dailyCounts[dateStr] || 0) + 1
-    })
-
-    return Object.keys(dailyCounts)
-      .sort()
-      .map(date => ({
-        date,
-        count: dailyCounts[date]
-      }))
+  static async createRole(name: string, description: string, permissions: string[]) {
+    return await adminService.createRole(name, description, permissions)
   }
 
-  private static async calculatePlatformEngagementMetrics(): Promise<EngagementData[]> {
-    const supabase = createClient()
-    
-    try {
-      // Calculate various engagement metrics comparing last 7 days vs previous 7 days
-      const sevenDaysAgo = new Date()
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
-      
-      const fourteenDaysAgo = new Date()
-      fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14)
+  static async assignRole(userId: string, roleId: string, assignedBy: string) {
+    return await adminService.assignRole(userId, roleId, assignedBy)
+  }
 
-      // Vibe checks comparison
-      const { data: recentVibeChecks } = await supabase
-        .from('vibe_checks')
-        .select('id')
-        .gte('created_at', sevenDaysAgo.toISOString())
+  static async removeRole(userId: string, roleId: string) {
+    return await adminService.removeRole(userId, roleId)
+  }
 
-      const { data: previousVibeChecks } = await supabase
-        .from('vibe_checks')
-        .select('id')
-        .gte('created_at', fourteenDaysAgo.toISOString())
-        .lt('created_at', sevenDaysAgo.toISOString())
+  static async getRoles() {
+    return await adminService.getRoles()
+  }
 
-      // Views comparison
-      const { data: recentViews } = await supabase
-        .from('club_views')
-        .select('id')
-        .gte('created_at', sevenDaysAgo.toISOString())
+  static async getUserRoles(userId: string) {
+    return await adminService.getUserRoles(userId)
+  }
 
-      const { data: previousViews } = await supabase
-        .from('club_views')
-        .select('id')
-        .gte('created_at', fourteenDaysAgo.toISOString())
-        .lt('created_at', sevenDaysAgo.toISOString())
+  static async createModerationReport(
+    reporterId: string,
+    contentType: string,
+    contentId: string,
+    reason: string,
+    description?: string
+  ) {
+    return await adminService.createModerationReport(reporterId, contentType, contentId, reason, description)
+  }
 
-      // User registrations comparison
-      const { data: recentUsers } = await supabase
-        .from('users')
-        .select('id')
-        .gte('created_at', sevenDaysAgo.toISOString())
+  static async getModerationReports(status?: string, limit: number = 50, offset: number = 0) {
+    return await adminService.getModerationReports(status, limit, offset)
+  }
 
-      const { data: previousUsers } = await supabase
-        .from('users')
-        .select('id')
-        .gte('created_at', fourteenDaysAgo.toISOString())
-        .lt('created_at', sevenDaysAgo.toISOString())
+  static async updateModerationReport(
+    reportId: string,
+    moderatorId: string,
+    status: string,
+    notes?: string
+  ) {
+    return await adminService.updateModerationReport(reportId, moderatorId, status, notes)
+  }
 
-      // Bookmarks comparison
-      const { data: recentBookmarks } = await supabase
-        .from('user_bookmarks')
-        .select('id')
-        .gte('created_at', sevenDaysAgo.toISOString())
+  // User moderation methods
+  static async moderateUser(userId: string, action: 'suspend' | 'delete' | 'activate'): Promise<void> {
+    switch (action) {
+      case 'suspend':
+      case 'delete':
+        await this.updateUser(userId, { is_active: false })
+        break
+      case 'activate':
+        await this.updateUser(userId, { is_active: true })
+        break
+    }
+  }
 
-      const { data: previousBookmarks } = await supabase
-        .from('user_bookmarks')
-        .select('id')
-        .gte('created_at', fourteenDaysAgo.toISOString())
-        .lt('created_at', sevenDaysAgo.toISOString())
-
-      // Calculate percentage changes
-      const calculateChange = (recent: number, previous: number) => {
-        if (previous === 0) return recent > 0 ? 100 : 0
-        return ((recent - previous) / previous) * 100
-      }
-
-      const recentVibeCount = recentVibeChecks?.length || 0
-      const previousVibeCount = previousVibeChecks?.length || 0
-      const recentViewCount = recentViews?.length || 0
-      const previousViewCount = previousViews?.length || 0
-      const recentUserCount = recentUsers?.length || 0
-      const previousUserCount = previousUsers?.length || 0
-      const recentBookmarkCount = recentBookmarks?.length || 0
-      const previousBookmarkCount = previousBookmarks?.length || 0
-
-      return [
-        {
-          metric: 'Vibe Checks',
-          value: recentVibeCount,
-          change: calculateChange(recentVibeCount, previousVibeCount)
-        },
-        {
-          metric: 'Venue Views',
-          value: recentViewCount,
-          change: calculateChange(recentViewCount, previousViewCount)
-        },
-        {
-          metric: 'New Users',
-          value: recentUserCount,
-          change: calculateChange(recentUserCount, previousUserCount)
-        },
-        {
-          metric: 'Bookmarks',
-          value: recentBookmarkCount,
-          change: calculateChange(recentBookmarkCount, previousBookmarkCount)
-        }
-      ]
-    } catch (error) {
-      console.error('Error calculating engagement metrics:', error)
-      return []
+  // Venue moderation methods
+  static async moderateVenue(venueId: string, action: 'approve' | 'delete' | 'hide'): Promise<void> {
+    switch (action) {
+      case 'approve':
+        await this.updateVenue(venueId, { is_verified: true, is_active: true })
+        break
+      case 'delete':
+      case 'hide':
+        await this.updateVenue(venueId, { is_active: false })
+        break
     }
   }
 
@@ -302,65 +207,33 @@ export class AdminService {
     
     // Basic metrics
     lines.push('Metric,Value')
-    lines.push(`Total Users,${analytics.total_users}`)
-    lines.push(`Total Venues,${analytics.total_venues}`)
-    lines.push(`Total Vibe Checks,${analytics.total_vibe_checks}`)
-    lines.push(`Total Promotions,${analytics.total_promotions}`)
-    lines.push(`New Users This Week,${analytics.new_users_week}`)
-    lines.push(`New Venues This Week,${analytics.new_venues_week}`)
-    lines.push(`New Vibe Checks This Week,${analytics.new_vibe_checks_week}`)
+    lines.push(`Total Users,${analytics.totalUsers}`)
+    lines.push(`Total Venues,${analytics.totalVenues}`)
+    lines.push(`Total Vibe Checks,${analytics.totalVibeChecks}`)
+    lines.push(`Total Reviews,${analytics.totalReviews}`)
+    lines.push(`Daily Active Users,${analytics.dailyActiveUsers}`)
+    lines.push(`Monthly Active Users,${analytics.monthlyActiveUsers}`)
     lines.push('')
 
-    // User growth data
-    if (analytics.user_growth && analytics.user_growth.length > 0) {
-      lines.push('User Growth')
-      lines.push('Date,New Users')
-      analytics.user_growth.forEach(item => {
-        lines.push(`${item.date},${item.count}`)
+    // Top venues
+    if (analytics.topVenues && analytics.topVenues.length > 0) {
+      lines.push('Top Venues')
+      lines.push('Name,Views,Checkins')
+      analytics.topVenues.forEach(venue => {
+        lines.push(`${venue.name},${venue.views},${venue.checkins}`)
       })
       lines.push('')
     }
 
-    // Venue growth data
-    if (analytics.venue_growth && analytics.venue_growth.length > 0) {
-      lines.push('Venue Growth')
-      lines.push('Date,New Venues')
-      analytics.venue_growth.forEach(item => {
-        lines.push(`${item.date},${item.count}`)
-      })
-      lines.push('')
-    }
-
-    // Engagement metrics
-    if (analytics.engagement_metrics && analytics.engagement_metrics.length > 0) {
-      lines.push('Engagement Metrics')
-      lines.push('Metric,Value,Change %')
-      analytics.engagement_metrics.forEach(item => {
-        lines.push(`${item.metric},${item.value},${item.change.toFixed(2)}`)
+    // Growth data
+    if (analytics.growthData && analytics.growthData.length > 0) {
+      lines.push('Growth Data')
+      lines.push('Date,New Users,New Venues,Total Vibe Checks')
+      analytics.growthData.forEach(item => {
+        lines.push(`${item.date},${item.newUsers},${item.newVenues},${item.totalVibeChecks}`)
       })
     }
 
     return lines.join('\n')
-  }
-
-  // Placeholder methods for user and venue management (will be implemented in other tasks)
-  static async getAllUsers(filters?: UserFilters): Promise<UserManagement[]> {
-    // Implementation will be added in user management task
-    throw new Error('Not implemented yet')
-  }
-
-  static async getAllVenues(filters?: VenueFilters): Promise<Venue[]> {
-    // Implementation will be added in venue management task
-    throw new Error('Not implemented yet')
-  }
-
-  static async moderateUser(userId: string, action: 'suspend' | 'delete' | 'activate'): Promise<void> {
-    // Implementation will be added in user management task
-    throw new Error('Not implemented yet')
-  }
-
-  static async moderateVenue(venueId: string, action: 'approve' | 'delete' | 'hide'): Promise<void> {
-    // Implementation will be added in venue management task
-    throw new Error('Not implemented yet')
   }
 }

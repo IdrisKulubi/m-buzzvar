@@ -14,8 +14,8 @@ import { ActivityIndicator, View } from "react-native";
 
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { ToastProvider } from "@/src/lib/ToastProvider";
-import { AuthProvider, useAuth } from "@/src/lib/hooks";
-import { checkUserProfile } from "@/src/actions/auth";
+import { AuthProvider, useAuth } from "@/src/lib/auth-provider";
+import { checkUserProfile, setupDeepLinking } from "@/src/actions/better-auth-actions";
 import { Colors } from "@/constants/Colors";
 
 function RootLayoutNav() {
@@ -24,6 +24,12 @@ function RootLayoutNav() {
   const segments = useSegments();
   const colorScheme = useColorScheme() ?? "dark";
   const colors = Colors[colorScheme];
+
+  useEffect(() => {
+    // Set up deep linking for OAuth callbacks
+    const cleanup = setupDeepLinking()
+    return cleanup
+  }, [])
 
   useEffect(() => {
     // Wait until authentication status is confirmed

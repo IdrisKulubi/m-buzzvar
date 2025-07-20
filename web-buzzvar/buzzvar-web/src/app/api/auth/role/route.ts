@@ -1,25 +1,28 @@
-import { auth, getUserRole } from "@/lib/auth/better-auth-server"
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest } from 'next/server'
+import { withApiHandler, createApiResponse, handleApiError, AuthenticatedRequest } from '@/lib/api/middleware'
 
-export async function GET(request: NextRequest) {
+export const GET = withApiHandler(async (request: AuthenticatedRequest) => {
   try {
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    })
-
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!request.user) {
+      return createApiResponse(undefined, {
+        status: 401,
+        error: 'Authentication required'
+      })
     }
 
-    const role = await getUserRole(session.user.id)
-
-    return NextResponse.json({ 
-      role,
-      isAdmin: role === 'admin' || role === 'super_admin',
-      isVenueOwner: role === 'venue_owner' || role === 'admin' || role === 'super_admin'
+    return createApiResponse({
+      role: request.user.role,
+      isAdmin: request.user.isAdmin,
+      isVenueOwner: request.user.isVenueOwner,
+      user: {
+        id: request.user.id,
+        email: request.user.email,
+        name: request.user.name
+      }
+    }, {
+      message: 'User role retrieved successfully'
     })
   } catch (error) {
-    console.error('Error getting user role:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return handleApiError(error, 'Auth Role GET')
   }
-}
+}, { requireAuth: true })

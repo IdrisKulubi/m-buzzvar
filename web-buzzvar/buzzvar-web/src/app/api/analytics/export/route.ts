@@ -1,80 +1,118 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase'
-import { AdminService } from '@/services/adminService'
-import { AnalyticsService } from '@/services/analyticsService'
+import { NextRequest, NextResponse } from "next/server";
+import { auth, isAdmin } from "@/lib/auth/better-auth-server";
+import { headers } from "next/headers";
+import { checkVenueOwnership } from "@/lib/api/middleware";
+import { AdminService } from "@/services/adminService";
+import { AnalyticsService } from "@/services/analyticsService";
+import { Pool } from "pg";
+
+const pool = new Pool({
+  connectionString: process.env.NEON_DATABASE_URL!,
+  ssl: process.env.NODE_ENV === "production",
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+});
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    // Get session
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    });
 
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!session) {
+      return NextResponse.json(
+        { error: "Authentication required" },
+        { status: 401 }
+      );
     }
 
-    const { searchParams } = new URL(request.url)
-    const type = searchParams.get('type') // 'platform' or 'venue'
-    const format = searchParams.get('format') as 'csv' | 'json' || 'csv'
-    const venueId = searchParams.get('venueId')
+    const userIsAdmin = await isAdmin(session.user.id);
 
-    // Check if user is admin for platform analytics
-    const adminEmails = process.env.ADMIN_EMAILS?.split(',') || []
-    const isAdmin = adminEmails.includes(user.email || '')
+    const { searchParams } = new URL(request.url);
+    const type = searchParams.get("type"); // 'platform' or 'venue'
+    const format = (searchParams.get("format") as "csv" | "json") || "csv";
+    const venueId = searchParams.get("venueId");
 
-    let blob: Blob
-    let filename: string
+    let blob: Blob;
+    let filename: string;
 
     switch (type) {
-      case 'platform':
-        if (!isAdmin) {
-          return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+      case "platform":
+        if (!userIsAdmin) {
+          return NextResponse.json(
+            { error: "Admin access required" },
+            { status: 403 }
+          );
         }
-        blob = await AdminService.exportPlatformAnalytics(format)
-        filename = `platform-analytics-${new Date().toISOString().split('T')[0]}.${format}`
-        break
+        blob = await AdminService.exportPlatformAnalytics(format);
+        filename = `platform-analytics-${
+          new Date().toISOString().split("T")[0]
+        }.${format}`;
+        break;
 
-      case 'venue':
+      case "venue":
         if (!venueId) {
-          return NextResponse.json({ error: 'Venue ID required' }, { status: 400 })
+          return NextResponse.json(
+            { error: "Venue ID required" },
+            { status: 400 }
+          );
         }
-        
-        // Check if user owns the venue or is admin
-        if (!isAdmin) {
-          const { data: venueOwnership } = await supabase
-            .from('venue_owners')
-            .select('id')
-            .eq('venue_id', venueId)
-            .eq('user_id', user.id)
-            .single()
 
-          if (!venueOwnership) {
-            return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+        // Check if user owns the venue or is admin
+        if (!userIsAdmin) {
+          const client = await pool.connect();
+          try {
+            const db = {
+              query: client.query.bind(client),
+              release: client.release.bind(client),
+            };
+            const hasAccess = await checkVenueOwnership(
+              db,
+              session.user.id,
+              venueId,
+              userIsAdmin
+            );
+            if (!hasAccess) {
+              return NextResponse.json(
+                { error: "Access denied" },
+                { status: 403 }
+              );
+            }
+          } finally {
+            client.release();
           }
         }
 
-        blob = await AnalyticsService.exportVenueAnalytics(venueId, format)
-        filename = `venue-analytics-${venueId}-${new Date().toISOString().split('T')[0]}.${format}`
-        break
+        blob = await AnalyticsService.exportVenueAnalytics(venueId, format);
+        filename = `venue-analytics-${venueId}-${
+          new Date().toISOString().split("T")[0]
+        }.${format}`;
+        break;
 
       default:
-        return NextResponse.json({ error: 'Invalid export type' }, { status: 400 })
+        return NextResponse.json(
+          { error: "Invalid export type" },
+          { status: 400 }
+        );
     }
 
-    const arrayBuffer = await blob.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
+    const arrayBuffer = await blob.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
 
     return new NextResponse(buffer, {
       headers: {
-        'Content-Type': blob.type,
-        'Content-Disposition': `attachment; filename="${filename}"`,
-        'Content-Length': buffer.length.toString(),
+        "Content-Type": blob.type,
+        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Content-Length": buffer.length.toString(),
       },
-    })
+    });
   } catch (error) {
-    console.error('Analytics export error:', error)
+    console.error("Analytics export error:", error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: "Internal server error" },
       { status: 500 }
-    )
+    );
   }
 }

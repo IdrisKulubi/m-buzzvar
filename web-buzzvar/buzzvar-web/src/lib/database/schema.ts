@@ -18,7 +18,7 @@ import {
   unique,
   primaryKey
 } from 'drizzle-orm/pg-core'
-import { relations } from 'drizzle-orm'
+import { relations, sql } from 'drizzle-orm'
 
 // ============================================================================
 // USERS AND AUTHENTICATION TABLES
@@ -121,10 +121,10 @@ export const venues = pgTable('venues', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 }, (table) => ({
-  latitudeCheck: check('check_latitude', `${table.latitude} >= -90 AND ${table.latitude} <= 90`),
-  longitudeCheck: check('check_longitude', `${table.longitude} >= -180 AND ${table.longitude} <= 180`),
-  capacityCheck: check('check_venue_capacity', `${table.capacity} IS NULL OR ${table.capacity} > 0`),
-  priceRangeCheck: check('check_price_range', `${table.priceRange} IS NULL OR (${table.priceRange} >= 1 AND ${table.priceRange} <= 4)`),
+  latitudeCheck: check('check_latitude', sql`${table.latitude} >= -90 AND ${table.latitude} <= 90`),
+  longitudeCheck: check('check_longitude', sql`${table.longitude} >= -180 AND ${table.longitude} <= 180`),
+  capacityCheck: check('check_venue_capacity', sql`${table.capacity} IS NULL OR ${table.capacity} > 0`),
+  priceRangeCheck: check('check_price_range', sql`${table.priceRange} IS NULL OR (${table.priceRange} >= 1 AND ${table.priceRange} <= 4)`),
 }))
 
 export const venueCategories = pgTable('venue_categories', {
@@ -171,11 +171,11 @@ export const promotions = pgTable('promotions', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 }, (table) => ({
-  discountPercentageCheck: check('check_discount_percentage', `${table.discountPercentage} IS NULL OR (${table.discountPercentage} >= 0 AND ${table.discountPercentage} <= 100)`),
-  minimumSpendCheck: check('check_minimum_spend', `${table.minimumSpend} IS NULL OR ${table.minimumSpend} >= 0`),
-  maxRedemptionsCheck: check('check_max_redemptions', `${table.maxRedemptions} IS NULL OR ${table.maxRedemptions} > 0`),
-  currentRedemptionsCheck: check('check_current_redemptions', `${table.currentRedemptions} >= 0 AND (${table.maxRedemptions} IS NULL OR ${table.currentRedemptions} <= ${table.maxRedemptions})`),
-  promotionDatesCheck: check('check_promotion_dates', `${table.endDate} > ${table.startDate}`),
+  discountPercentageCheck: check('check_discount_percentage', sql`${table.discountPercentage} IS NULL OR (${table.discountPercentage} >= 0 AND ${table.discountPercentage} <= 100)`),
+  minimumSpendCheck: check('check_minimum_spend', sql`${table.minimumSpend} IS NULL OR ${table.minimumSpend} >= 0`),
+  maxRedemptionsCheck: check('check_max_redemptions', sql`${table.maxRedemptions} IS NULL OR ${table.maxRedemptions} > 0`),
+  currentRedemptionsCheck: check('check_current_redemptions', sql`${table.currentRedemptions} >= 0 AND (${table.maxRedemptions} IS NULL OR ${table.currentRedemptions} <= ${table.maxRedemptions})`),
+  promotionDatesCheck: check('check_promotion_dates', sql`${table.endDate} > ${table.startDate}`),
 }))
 
 export const events = pgTable('events', {
@@ -197,10 +197,10 @@ export const events = pgTable('events', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 }, (table) => ({
-  eventDatesCheck: check('check_event_dates', `${table.endDatetime} > ${table.startDatetime}`),
-  eventCapacityCheck: check('check_event_capacity', `${table.maxAttendees} IS NULL OR ${table.maxAttendees} > 0`),
-  currentAttendeesCheck: check('check_current_attendees', `${table.currentAttendees} >= 0 AND (${table.maxAttendees} IS NULL OR ${table.currentAttendees} <= ${table.maxAttendees})`),
-  ticketPriceCheck: check('check_ticket_price', `${table.ticketPrice} IS NULL OR ${table.ticketPrice} >= 0`),
+  eventDatesCheck: check('check_event_dates', sql`${table.endDatetime} > ${table.startDatetime}`),
+  eventCapacityCheck: check('check_event_capacity', sql`${table.maxAttendees} IS NULL OR ${table.maxAttendees} > 0`),
+  currentAttendeesCheck: check('check_current_attendees', sql`${table.currentAttendees} >= 0 AND (${table.maxAttendees} IS NULL OR ${table.currentAttendees} <= ${table.maxAttendees})`),
+  ticketPriceCheck: check('check_ticket_price', sql`${table.ticketPrice} IS NULL OR ${table.ticketPrice} >= 0`),
 }))
 
 // ============================================================================
@@ -223,11 +223,11 @@ export const vibeChecks = pgTable('vibe_checks', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 }, (table) => ({
-  crowdLevelCheck: check('check_crowd_level', `${table.crowdLevel} >= 1 AND ${table.crowdLevel} <= 5`),
-  musicVolumeCheck: check('check_music_volume', `${table.musicVolume} >= 1 AND ${table.musicVolume} <= 5`),
-  energyLevelCheck: check('check_energy_level', `${table.energyLevel} >= 1 AND ${table.energyLevel} <= 5`),
-  waitTimeCheck: check('check_wait_time', `${table.waitTime} >= 0 AND ${table.waitTime} <= 480`),
-  coverChargeCheck: check('check_cover_charge', `${table.coverCharge} >= 0`),
+  crowdLevelCheck: check('check_crowd_level', sql`${table.crowdLevel} >= 1 AND ${table.crowdLevel} <= 5`),
+  musicVolumeCheck: check('check_music_volume', sql`${table.musicVolume} >= 1 AND ${table.musicVolume} <= 5`),
+  energyLevelCheck: check('check_energy_level', sql`${table.energyLevel} >= 1 AND ${table.energyLevel} <= 5`),
+  waitTimeCheck: check('check_wait_time', sql`${table.waitTime} >= 0 AND ${table.waitTime} <= 480`),
+  coverChargeCheck: check('check_cover_charge', sql`${table.coverCharge} >= 0`),
   uniqueVibeCheckPerDay: unique().on(table.venueId, table.userId, table.createdAt),
 }))
 
@@ -239,7 +239,7 @@ export const vibeCheckReactions = pgTable('vibe_check_reactions', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 }, (table) => ({
   uniqueReaction: unique().on(table.vibeCheckId, table.userId),
-  reactionTypeCheck: check('reaction_type_check', `${table.reactionType} IN ('helpful', 'not_helpful')`),
+  reactionTypeCheck: check('reaction_type_check', sql`${table.reactionType} IN ('helpful', 'not_helpful')`),
 }))
 
 export const reviews = pgTable('reviews', {
@@ -255,7 +255,7 @@ export const reviews = pgTable('reviews', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 }, (table) => ({
-  ratingCheck: check('check_review_rating', `${table.rating} >= 1 AND ${table.rating} <= 5`),
+  ratingCheck: check('check_review_rating', sql`${table.rating} >= 1 AND ${table.rating} <= 5`),
 }))
 
 export const reviewReactions = pgTable('review_reactions', {
@@ -266,7 +266,7 @@ export const reviewReactions = pgTable('review_reactions', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 }, (table) => ({
   uniqueReaction: unique().on(table.reviewId, table.userId),
-  reactionTypeCheck: check('reaction_type_check', `${table.reactionType} IN ('helpful', 'not_helpful')`),
+  reactionTypeCheck: check('reaction_type_check', sql`${table.reactionType} IN ('helpful', 'not_helpful')`),
 }))
 
 // ============================================================================
@@ -300,7 +300,7 @@ export const userFollows = pgTable('user_follows', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 }, (table) => ({
   uniqueFollow: unique().on(table.followerId, table.followingId),
-  noSelfFollow: check('no_self_follow', `${table.followerId} != ${table.followingId}`),
+  noSelfFollow: check('no_self_follow', sql`${table.followerId} != ${table.followingId}`),
 }))
 
 // ============================================================================

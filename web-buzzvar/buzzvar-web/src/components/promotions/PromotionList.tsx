@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { PromotionService, PromotionWithStatus } from '@/services/promotionService'
+import { ClientPromotionService, PromotionWithStatus } from '@/services/client/promotionService'
 import { PromotionFilters } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -52,7 +52,7 @@ export function PromotionList({ venueId, onEdit, onCreateNew }: PromotionListPro
   const loadPromotions = async () => {
     try {
       setLoading(true)
-      const data = await PromotionService.getVenuePromotions(venueId, filters)
+      const data = await ClientPromotionService.getPromotions({ ...filters, venue_id: venueId })
       
       // Apply search filter
       const filteredData = searchTerm 
@@ -73,7 +73,7 @@ export function PromotionList({ venueId, onEdit, onCreateNew }: PromotionListPro
 
   const handleDelete = async (promotionId: string) => {
     try {
-      await PromotionService.deletePromotion(promotionId)
+      await ClientPromotionService.deletePromotion(promotionId)
       toast.success('Promotion deleted successfully')
       loadPromotions()
     } catch (error) {
@@ -84,7 +84,7 @@ export function PromotionList({ venueId, onEdit, onCreateNew }: PromotionListPro
 
   const handleToggleStatus = async (promotionId: string, currentStatus: boolean) => {
     try {
-      await PromotionService.togglePromotionStatus(promotionId, !currentStatus)
+      await ClientPromotionService.updatePromotion(promotionId, { is_active: !currentStatus })
       toast.success(`Promotion ${!currentStatus ? 'activated' : 'deactivated'} successfully`)
       loadPromotions()
     } catch (error) {
@@ -95,7 +95,14 @@ export function PromotionList({ venueId, onEdit, onCreateNew }: PromotionListPro
 
   const handleDuplicate = async (promotionId: string) => {
     try {
-      await PromotionService.duplicatePromotion(promotionId)
+      const original = await ClientPromotionService.getPromotionById(promotionId)
+      if (original) {
+        const { id, created_at, updated_at, ...duplicateData } = original
+        await ClientPromotionService.createPromotion({
+          ...duplicateData,
+          title: `${duplicateData.title} (Copy)`
+        })
+      }
       toast.success('Promotion duplicated successfully')
       loadPromotions()
     } catch (error) {
@@ -112,12 +119,14 @@ export function PromotionList({ venueId, onEdit, onCreateNew }: PromotionListPro
 
     try {
       if (action === 'delete') {
-        await Promise.all(selectedPromotions.map(id => PromotionService.deletePromotion(id)))
+        await Promise.all(selectedPromotions.map(id => ClientPromotionService.deletePromotion(id)))
         toast.success(`${selectedPromotions.length} promotions deleted`)
       } else {
-        await PromotionService.bulkUpdatePromotions(selectedPromotions, {
-          is_active: action === 'activate'
-        })
+        await Promise.all(selectedPromotions.map(id => 
+          ClientPromotionService.updatePromotion(id, {
+            is_active: action === 'activate'
+          })
+        ))
         toast.success(`${selectedPromotions.length} promotions ${action}d`)
       }
       

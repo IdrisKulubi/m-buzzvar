@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import Button from '../src/components/Button';
-import { signInWithGoogle } from '../src/actions/auth';
+import { signInWithGoogle } from '../src/actions/better-auth-actions';
 import { Colors } from '../constants/Colors';
 
 const { width, height } = Dimensions.get('window');

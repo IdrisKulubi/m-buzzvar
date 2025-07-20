@@ -1,34 +1,31 @@
-'use client'
+import { redirect } from "next/navigation";
+import {
+  auth,
+  getUserRole,
+  isVenueOwner,
+  isAdmin,
+} from "@/lib/auth/better-auth-server";
+import { headers } from "next/headers";
+import { PromotionManagement } from "@/components/promotions/PromotionManagement";
+import { promotionService } from "@/lib/database/services";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertCircle } from "lucide-react";
 
-import { useState } from 'react'
-import { useAuth } from '@/hooks/useAuth'
-import { PromotionList } from '@/components/promotions/PromotionList'
-import { PromotionForm } from '@/components/promotions/PromotionForm'
-import { PromotionService, PromotionWithStatus } from '@/services/promotionService'
-import { PromotionFormData } from '@/lib/types'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { toast } from 'sonner'
-import { AlertCircle } from 'lucide-react'
+export default async function PromotionsPage() {
+  // Get session on server side
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
 
-export default function PromotionsPage() {
-  const { user, loading } = useAuth()
-  const [selectedPromotion, setSelectedPromotion] = useState<PromotionWithStatus | null>(null)
-  const [showForm, setShowForm] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [refreshKey, setRefreshKey] = useState(0)
-
-  if (loading) {
-    return (
-      <div className="p-6">
-        <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-gray-200 rounded w-1/4"></div>
-          <div className="h-64 bg-gray-200 rounded"></div>
-        </div>
-      </div>
-    )
+  if (!session) {
+    redirect("/login");
   }
 
-  if (!user || (user.role !== 'venue_owner' && user.role !== 'admin')) {
+  const userRole = await getUserRole(session.user.id);
+  const userIsAdmin = await isAdmin(session.user.id);
+  const userIsVenueOwner = await isVenueOwner(session.user.id);
+
+  if (!userIsVenueOwner && !userIsAdmin) {
     return (
       <div className="p-6">
         <Alert>
@@ -38,13 +35,19 @@ export default function PromotionsPage() {
           </AlertDescription>
         </Alert>
       </div>
-    )
+    );
   }
 
-  // For now, use the first venue if user is a venue owner
-  const venueId = user.role === 'venue_owner' && user.venues?.[0]?.venue_id
+  // Get user's venues if they're a venue owner
+  let venueId: string | null = null;
+  if (userIsVenueOwner && !userIsAdmin) {
+    // For venue owners, get their first venue
+    // TODO: Implement proper venue selection for multi-venue owners
+    const venues = await promotionService.getUserVenues(session.user.id);
+    venueId = venues[0]?.id || null;
+  }
 
-  if (user.role === 'venue_owner' && !venueId) {
+  if (userIsVenueOwner && !userIsAdmin && !venueId) {
     return (
       <div className="p-6">
         <Alert>
@@ -54,68 +57,20 @@ export default function PromotionsPage() {
           </AlertDescription>
         </Alert>
       </div>
-    )
+    );
   }
 
-  const handleEditPromotion = (promotion: PromotionWithStatus) => {
-    setSelectedPromotion(promotion)
-    setShowForm(true)
-  }
-
-  const handleCreateNew = () => {
-    setSelectedPromotion(null)
-    setShowForm(true)
-  }
-
-  const handleCloseForm = () => {
-    setSelectedPromotion(null)
-    setShowForm(false)
-  }
-
-  const handleSubmitPromotion = async (data: PromotionFormData) => {
-    if (!venueId) return
-
-    try {
-      setIsSubmitting(true)
-      
-      if (selectedPromotion) {
-        // Update existing promotion
-        await PromotionService.updatePromotion(selectedPromotion.id, data)
-        toast.success('Promotion updated successfully')
-      } else {
-        // Create new promotion
-        await PromotionService.createPromotion(venueId, data)
-        toast.success('Promotion created successfully')
-      }
-      
-      handleCloseForm()
-      setRefreshKey(prev => prev + 1) // Trigger refresh of promotion list
-    } catch (error) {
-      console.error('Failed to save promotion:', error)
-      toast.error('Failed to save promotion')
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
+  // For admins, they can manage all venues, so venueId can be null initially
+  const initialVenueId = venueId || (userIsAdmin ? "admin-view" : null);
 
   return (
     <div className="p-6">
-      {showForm ? (
-        <PromotionForm
-          venueId={venueId || 'demo-venue'}
-          promotion={selectedPromotion}
-          onSubmit={handleSubmitPromotion}
-          onCancel={handleCloseForm}
-          isSubmitting={isSubmitting}
-        />
-      ) : (
-        <PromotionList
-          key={refreshKey}
-          venueId={venueId || 'demo-venue'}
-          onEdit={handleEditPromotion}
-          onCreateNew={handleCreateNew}
-        />
-      )}
+      <PromotionManagement
+        initialVenueId={initialVenueId || ""}
+        userRole={userRole || "user"}
+        isAdmin={userIsAdmin}
+        isVenueOwner={userIsVenueOwner}
+      />
     </div>
-  )
+  );
 }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { PromotionService } from '@/services/promotionService'
+import { ClientPromotionService } from '@/services/client/promotionService'
 import { PromotionFormData } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -14,7 +14,7 @@ import {
   Music, 
   GraduationCap, 
   Star,
-  Template
+  FileText
 } from 'lucide-react'
 
 interface PromotionTemplatesProps {
@@ -23,7 +23,7 @@ interface PromotionTemplatesProps {
 
 export function PromotionTemplates({ onSelectTemplate }: PromotionTemplatesProps) {
   const [open, setOpen] = useState(false)
-  const templates = PromotionService.getPromotionTemplates()
+  const templates = ClientPromotionService.getPromotionTemplates()
 
   const getTemplateIcon = (type: string) => {
     switch (type) {
@@ -36,7 +36,7 @@ export function PromotionTemplates({ onSelectTemplate }: PromotionTemplatesProps
       case 'special':
         return <Star className="h-6 w-6" />
       default:
-        return <Template className="h-6 w-6" />
+        return <FileText className="h-6 w-6" />
     }
   }
 
@@ -69,7 +69,7 @@ export function PromotionTemplates({ onSelectTemplate }: PromotionTemplatesProps
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="outline" className="gap-2">
-          <Template className="h-4 w-4" />
+          <FileText className="h-4 w-4" />
           Use Template
         </Button>
       </DialogTrigger>

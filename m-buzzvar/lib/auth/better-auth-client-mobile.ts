@@ -4,7 +4,7 @@ import * as SecureStore from "expo-secure-store"
 import { useState, useEffect, useCallback } from "react"
 
 export const authClient = createAuthClient({
-  baseURL: process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000",
+  baseURL: process.env.EXPO_PUBLIC_AUTH_URL || "http://localhost:3000",
   plugins: [
     expoClient({
       scheme: "buzzvar",
@@ -24,7 +24,8 @@ export function useAuthRole() {
     async function fetchRole() {
       if (session?.user && !isPending) {
         try {
-          const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/auth/role`, {
+          const baseUrl = process.env.EXPO_PUBLIC_AUTH_URL || "http://localhost:3000"
+          const response = await fetch(`${baseUrl}/api/auth/role`, {
             credentials: 'include',
             headers: {
               'Cookie': authClient.getCookie() || '',
@@ -64,11 +65,12 @@ export function useAuthenticatedFetch() {
 
   const authenticatedFetch = useCallback(async (url: string, options: RequestInit = {}) => {
     const cookies = getCookies()
-    const baseUrl = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000"
+    const baseUrl = process.env.EXPO_PUBLIC_AUTH_URL || "http://localhost:3000"
     const fullUrl = url.startsWith('http') ? url : `${baseUrl}${url}`
     
     return fetch(fullUrl, {
       ...options,
+      credentials: 'include',
       headers: {
         ...options.headers,
         'Cookie': cookies || '',
@@ -88,8 +90,9 @@ export function handleOAuthRedirect(url: string) {
 // Helper function to check if user has specific permission
 export async function hasPermission(permission: string): Promise<boolean> {
   try {
-    const baseUrl = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000"
+    const baseUrl = process.env.EXPO_PUBLIC_AUTH_URL || "http://localhost:3000"
     const response = await fetch(`${baseUrl}/api/auth/permissions`, {
+      credentials: 'include',
       headers: {
         'Cookie': authClient.getCookie() || '',
       },

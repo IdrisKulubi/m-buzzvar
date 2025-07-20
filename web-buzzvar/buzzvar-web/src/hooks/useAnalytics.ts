@@ -1,9 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { AnalyticsService } from '@/services/analyticsService'
+import { ClientAnalyticsService } from '@/services/client/analyticsService'
 import { VenueAnalytics, PlatformAnalytics } from '@/lib/types'
-import { createClient } from '@/lib/supabase'
 
 export function useVenueAnalytics(venueId?: string, period: string = '7d') {
   const [analytics, setAnalytics] = useState<VenueAnalytics | null>(null)
@@ -17,7 +16,7 @@ export function useVenueAnalytics(venueId?: string, period: string = '7d') {
     setError(null)
 
     try {
-      const data = await AnalyticsService.getVenueAnalytics(venueId, period)
+      const data = await ClientAnalyticsService.getVenueAnalytics(venueId, period)
       setAnalytics(data)
     } catch (err) {
       console.error('Error fetching venue analytics:', err)
@@ -31,58 +30,18 @@ export function useVenueAnalytics(venueId?: string, period: string = '7d') {
     fetchAnalytics()
   }, [fetchAnalytics])
 
-  // Set up real-time subscriptions for live updates
+  // Set up real-time subscriptions for live updates using WebSocket
   useEffect(() => {
     if (!venueId) return
 
-    const supabase = createClient()
-
-    // Subscribe to vibe check changes
-    const vibeCheckSubscription = supabase
-      .channel(`vibe-checks-${venueId}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'vibe_checks',
-        filter: `venue_id=eq.${venueId}`
-      }, () => {
-        // Refresh analytics when new vibe checks are added
-        fetchAnalytics()
-      })
-      .subscribe()
-
-    // Subscribe to view changes
-    const viewSubscription = supabase
-      .channel(`views-${venueId}`)
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'club_views',
-        filter: `club_id=eq.${venueId}`
-      }, () => {
-        // Refresh analytics when new views are recorded
-        fetchAnalytics()
-      })
-      .subscribe()
-
-    // Subscribe to bookmark changes
-    const bookmarkSubscription = supabase
-      .channel(`bookmarks-${venueId}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'user_bookmarks',
-        filter: `venue_id=eq.${venueId}`
-      }, () => {
-        // Refresh analytics when bookmarks change
-        fetchAnalytics()
-      })
-      .subscribe()
+    // TODO: Implement WebSocket-based real-time updates
+    // This will be handled by the WebSocket server for real-time analytics updates
+    const interval = setInterval(() => {
+      fetchAnalytics()
+    }, 30000) // Refresh every 30 seconds as fallback
 
     return () => {
-      vibeCheckSubscription.unsubscribe()
-      viewSubscription.unsubscribe()
-      bookmarkSubscription.unsubscribe()
+      clearInterval(interval)
     }
   }, [venueId, fetchAnalytics])
 
@@ -90,7 +49,7 @@ export function useVenueAnalytics(venueId?: string, period: string = '7d') {
     if (!venueId) return
 
     try {
-      const blob = await AnalyticsService.exportVenueAnalytics(venueId, format)
+      const blob = await ClientAnalyticsService.exportVenueAnalytics(venueId, format)
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -124,7 +83,7 @@ export function usePlatformAnalytics() {
     setError(null)
 
     try {
-      const data = await AnalyticsService.getPlatformAnalytics()
+      const data = await ClientAnalyticsService.getPlatformAnalytics()
       setAnalytics(data)
     } catch (err) {
       console.error('Error fetching platform analytics:', err)
@@ -138,50 +97,16 @@ export function usePlatformAnalytics() {
     fetchAnalytics()
   }, [fetchAnalytics])
 
-  // Set up real-time subscriptions for platform-wide updates
+  // Set up real-time subscriptions for platform-wide updates using WebSocket
   useEffect(() => {
-    const supabase = createClient()
-
-    // Subscribe to new users
-    const userSubscription = supabase
-      .channel('platform-users')
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'users'
-      }, () => {
-        fetchAnalytics()
-      })
-      .subscribe()
-
-    // Subscribe to new venues
-    const venueSubscription = supabase
-      .channel('platform-venues')
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'venues'
-      }, () => {
-        fetchAnalytics()
-      })
-      .subscribe()
-
-    // Subscribe to new vibe checks
-    const vibeCheckSubscription = supabase
-      .channel('platform-vibe-checks')
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'vibe_checks'
-      }, () => {
-        fetchAnalytics()
-      })
-      .subscribe()
+    // TODO: Implement WebSocket-based real-time updates
+    // This will be handled by the WebSocket server for real-time platform analytics
+    const interval = setInterval(() => {
+      fetchAnalytics()
+    }, 60000) // Refresh every minute as fallback
 
     return () => {
-      userSubscription.unsubscribe()
-      venueSubscription.unsubscribe()
-      vibeCheckSubscription.unsubscribe()
+      clearInterval(interval)
     }
   }, [fetchAnalytics])
 

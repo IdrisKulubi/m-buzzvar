@@ -44,12 +44,6 @@
           "resizeMode": "contain",
           "backgroundColor": "#000000"
         }
-      ],
-      [
-        "@better-auth/expo",
-        {
-          "scheme": "buzzvar"
-        }
       ]
     ],
     "experiments": {

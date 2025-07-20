@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet } from 'react-native'
 import { authClient, useAuthRole } from '@/lib/auth/better-auth-client-mobile'
+import { signInWithGoogle, signIn, signUp } from '@/src/actions/better-auth-actions'
 
 export default function AuthTest() {
   const { user, role, isLoading, isAuthenticated, isAdmin, isVenueOwner } = useAuthRole()
@@ -15,25 +16,25 @@ export default function AuthTest() {
 
     try {
       if (isSignUp) {
-        const result = await authClient.signUp.email({
+        const { data, error } = await signUp({
           email,
           password,
           name,
         })
         
-        if (result.error) {
-          Alert.alert('Sign Up Error', result.error.message)
+        if (error) {
+          Alert.alert('Sign Up Error', error.message || 'Sign up failed')
         } else {
           Alert.alert('Success', 'Sign up successful! Please check your email for verification.')
         }
       } else {
-        const result = await authClient.signIn.email({
+        const { data, error } = await signIn({
           email,
           password,
         })
         
-        if (result.error) {
-          Alert.alert('Sign In Error', result.error.message)
+        if (error) {
+          Alert.alert('Sign In Error', error.message || 'Sign in failed')
         } else {
           Alert.alert('Success', 'Sign in successful!')
         }
@@ -49,12 +50,12 @@ export default function AuthTest() {
     setLoading(true)
 
     try {
-      const result = await authClient.signIn.social({
-        provider: 'google',
-      })
+      const { data, error } = await signInWithGoogle()
       
-      if (result.error) {
-        Alert.alert('Google Sign In Error', result.error.message)
+      if (error) {
+        Alert.alert('Google Sign In Error', error.message || 'Google sign in failed')
+      } else {
+        Alert.alert('Success', 'Google sign in successful!')
       }
     } catch (error) {
       Alert.alert('Error', error instanceof Error ? error.message : 'Unknown error')

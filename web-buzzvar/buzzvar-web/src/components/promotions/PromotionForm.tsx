@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { PromotionService, PromotionWithStatus } from '@/services/promotionService'
+import { ClientPromotionService, PromotionWithStatus } from '@/services/client/promotionService'
 import { PromotionFormData } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -134,7 +134,7 @@ export function PromotionForm({
 
     try {
       const formData = form.getValues()
-      await PromotionService.updatePromotion(promotion.id, formData)
+      await ClientPromotionService.updatePromotion(promotion.id, formData)
       toast.success('Changes saved automatically')
       setHasUnsavedChanges(false)
     } catch (error) {
@@ -144,7 +144,8 @@ export function PromotionForm({
 
   const checkForConflicts = async () => {
     try {
-      const existingPromotions = await PromotionService.getVenuePromotions(venueId, {
+      const existingPromotions = await ClientPromotionService.getPromotions({
+        venue_id: venueId,
         start_date: watchedValues.start_date,
         end_date: watchedValues.end_date
       })
