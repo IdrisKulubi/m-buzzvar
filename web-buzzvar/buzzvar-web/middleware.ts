@@ -17,11 +17,14 @@ export async function middleware(request: NextRequest) {
   // Protected routes that require authentication
   const protectedRoutes = ['/admin', '/dashboard', '/venues/manage']
   const adminRoutes = ['/admin', '/dashboard/admin']
-  const venueOwnerRoutes = ['/venues/manage', '/dashboard']
+  const venueOwnerRoutes = ['/venues/manage']
 
   const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route))
   const isAdminRoute = adminRoutes.some(route => pathname.startsWith(route))
   const isVenueOwnerRoute = venueOwnerRoutes.some(route => pathname.startsWith(route))
+  
+  // Check if it's a general dashboard route (not admin-specific)
+  const isGeneralDashboard = pathname === '/dashboard' || (pathname.startsWith('/dashboard') && !pathname.startsWith('/dashboard/admin'))
 
   // Get session cookie using Better Auth helper
   const sessionCookie = getSessionCookie(request)
@@ -46,16 +49,30 @@ export async function middleware(request: NextRequest) {
         })
 
         if (roleResponse.ok) {
-          const { role } = await roleResponse.json()
+          const roleData = await roleResponse.json()
+          const { role } = roleData
+          
+          console.log(`Middleware role check for ${pathname}:`, {
+            role,
+            isAdminRoute,
+            isVenueOwnerRoute,
+            isGeneralDashboard,
+            roleData
+          })
           
           if (isAdminRoute && !['admin', 'super_admin'].includes(role)) {
+            console.log(`Access denied to admin route ${pathname} for role: ${role}`)
             return NextResponse.redirect(new URL('/unauthorized', request.url))
           }
           
           if (isVenueOwnerRoute && !['venue_owner', 'admin', 'super_admin'].includes(role)) {
+            console.log(`Access denied to venue owner route ${pathname} for role: ${role}`)
             return NextResponse.redirect(new URL('/unauthorized', request.url))
           }
+          
+          console.log(`Access granted to ${pathname} for role: ${role}`)
         } else {
+          console.log(`Role API failed with status: ${roleResponse.status}`)
           return NextResponse.redirect(new URL('/login', request.url))
         }
       } catch (roleError) {
@@ -63,6 +80,9 @@ export async function middleware(request: NextRequest) {
         // Allow access but log the error - role will be checked again in the component
       }
     }
+    
+    // General dashboard routes are accessible to all authenticated users
+    // No additional role check needed for /dashboard (but not /dashboard/admin)
   }
 
   // Handle auth page redirects and root redirect

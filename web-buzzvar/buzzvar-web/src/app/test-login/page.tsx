@@ -37,7 +37,20 @@ export default function TestLoginPage() {
       const result = await authClient.getSession();
 
       if (result.data && result.data.user) {
-        setStatus(`Session found: ${result.data.user.email}`);
+        // Also fetch role information
+        try {
+          const roleResponse = await fetch('/api/auth/role', {
+            credentials: 'include',
+          });
+          if (roleResponse.ok) {
+            const roleData = await roleResponse.json();
+            setStatus(`Session found: ${result.data.user.email} (Role: ${roleData.role}, Admin: ${roleData.isAdmin})`);
+          } else {
+            setStatus(`Session found: ${result.data.user.email} (Role: unknown)`);
+          }
+        } catch (roleError) {
+          setStatus(`Session found: ${result.data.user.email} (Role fetch failed)`);
+        }
       } else if (result.error) {
         setStatus(`Session error: ${result.error.message}`);
       } else {

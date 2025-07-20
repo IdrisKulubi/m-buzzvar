@@ -1,11 +1,10 @@
 import { auth, getUserRole } from "@/lib/auth/better-auth-server"
 import { NextRequest, NextResponse } from "next/server"
-import { headers } from "next/headers"
 
 export async function GET(request: NextRequest) {
   try {
     const session = await auth.api.getSession({
-      headers: await headers(),
+      headers: request.headers,
     })
 
     if (!session) {
@@ -13,10 +12,11 @@ export async function GET(request: NextRequest) {
     }
 
     const role = await getUserRole(session.user.id)
-    
+
     return NextResponse.json({ 
       role,
-      user: session.user 
+      isAdmin: role === 'admin' || role === 'super_admin',
+      isVenueOwner: role === 'venue_owner' || role === 'admin' || role === 'super_admin'
     })
   } catch (error) {
     console.error('Error getting user role:', error)

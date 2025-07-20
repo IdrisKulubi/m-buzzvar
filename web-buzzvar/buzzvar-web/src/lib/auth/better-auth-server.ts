@@ -36,10 +36,51 @@ export const auth = betterAuth({
   },
 });
 
-// Simple role management functions without complex database operations for now
+// Role management functions with admin email checking
 export async function getUserRole(userId: string): Promise<string | null> {
-  // For now, return 'user' as default. This can be enhanced later.
-  return "user";
+  try {
+    const pool = getPool();
+    const client = await pool.connect();
+
+    try {
+      // Get user email from database
+      const userResult = await client.query(
+        'SELECT email FROM "user" WHERE id = $1',
+        [userId]
+      );
+
+      if (userResult.rows.length === 0) {
+        console.log(`User with ID ${userId} not found`);
+        return null;
+      }
+
+      const userEmail = userResult.rows[0].email;
+      console.log(`Checking role for user email: ${userEmail}`);
+
+      // Check if user is admin based on ADMIN_EMAILS environment variable
+      const adminEmailsEnv = process.env.ADMIN_EMAILS;
+      console.log(`ADMIN_EMAILS env var: ${adminEmailsEnv}`);
+
+      const adminEmails =
+        adminEmailsEnv?.split(",").map((email) => email.trim().toLowerCase()) ||
+        [];
+      console.log(`Parsed admin emails:`, adminEmails);
+
+      if (adminEmails.includes(userEmail.toLowerCase())) {
+        console.log(`User ${userEmail} is an admin`);
+        return "admin";
+      }
+
+      console.log(`User ${userEmail} is a regular user`);
+      // For now, return 'user' as default for non-admin users
+      return "user";
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error("Error fetching user role:", error);
+    return "user";
+  }
 }
 
 export async function assignUserRole(
@@ -47,7 +88,8 @@ export async function assignUserRole(
   roleName: string,
   assignedBy?: string
 ): Promise<boolean> {
-  // For now, return true. This can be enhanced later.
+  // For now, return true. This can be enhanced later with proper role tables.
+  console.log(`Assigning role ${roleName} to user ${userId} by ${assignedBy}`);
   return true;
 }
 
@@ -59,4 +101,44 @@ export async function isAdmin(userId: string): Promise<boolean> {
 export async function isVenueOwner(userId: string): Promise<boolean> {
   const role = await getUserRole(userId);
   return role === "venue_owner" || role === "admin" || role === "super_admin";
+}
+
+export async function getUserByEmail(email: string) {
+  try {
+    const pool = getPool();
+    const client = await pool.connect();
+
+    try {
+      const result = await client.query(
+        'SELECT * FROM "user" WHERE email = $1',
+        [email]
+      );
+      return result.rows[0] || null;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error("Error fetching user by email:", error);
+    return null;
+  }
+}
+
+// Debug function to test environment variable loading
+export function debugAdminEmails() {
+  console.log("=== Admin Emails Debug ===");
+  console.log("ADMIN_EMAILS env var:", process.env.ADMIN_EMAILS);
+  console.log(
+    "All env vars starting with ADMIN:",
+    Object.keys(process.env).filter((key) => key.startsWith("ADMIN"))
+  );
+
+  const adminEmails =
+    process.env.ADMIN_EMAILS?.split(",").map((email) => email.trim()) || [];
+  console.log("Parsed admin emails:", adminEmails);
+  console.log("========================");
+
+  return {
+    raw: process.env.ADMIN_EMAILS,
+    parsed: adminEmails,
+  };
 }
