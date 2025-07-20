@@ -13,35 +13,25 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url)
-    const type = searchParams.get('type')
+    const type = searchParams.get('type') // 'platform' or 'venue'
+    const format = searchParams.get('format') as 'csv' | 'json' || 'csv'
     const venueId = searchParams.get('venueId')
-    const period = searchParams.get('period') || '7d'
 
     // Check if user is admin for platform analytics
     const adminEmails = process.env.ADMIN_EMAILS?.split(',') || []
     const isAdmin = adminEmails.includes(user.email || '')
+
+    let blob: Blob
+    let filename: string
 
     switch (type) {
       case 'platform':
         if (!isAdmin) {
           return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
         }
-        const platformAnalytics = await AdminService.getPlatformAnalytics()
-        return NextResponse.json({ data: platformAnalytics })
-
-      case 'system-health':
-        if (!isAdmin) {
-          return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
-        }
-        const systemHealth = await AdminService.getSystemHealthMetrics()
-        return NextResponse.json({ data: systemHealth })
-
-      case 'real-time':
-        if (!isAdmin) {
-          return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
-        }
-        const realTimeMetrics = await AdminService.getRealTimeMetrics()
-        return NextResponse.json({ data: realTimeMetrics })
+        blob = await AdminService.exportPlatformAnalytics(format)
+        filename = `platform-analytics-${new Date().toISOString().split('T')[0]}.${format}`
+        break
 
       case 'venue':
         if (!venueId) {
@@ -62,14 +52,26 @@ export async function GET(request: NextRequest) {
           }
         }
 
-        const venueAnalytics = await AnalyticsService.getVenueAnalytics(venueId, period)
-        return NextResponse.json({ data: venueAnalytics })
+        blob = await AnalyticsService.exportVenueAnalytics(venueId, format)
+        filename = `venue-analytics-${venueId}-${new Date().toISOString().split('T')[0]}.${format}`
+        break
 
       default:
-        return NextResponse.json({ error: 'Invalid analytics type' }, { status: 400 })
+        return NextResponse.json({ error: 'Invalid export type' }, { status: 400 })
     }
+
+    const arrayBuffer = await blob.arrayBuffer()
+    const buffer = Buffer.from(arrayBuffer)
+
+    return new NextResponse(buffer, {
+      headers: {
+        'Content-Type': blob.type,
+        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Content-Length': buffer.length.toString(),
+      },
+    })
   } catch (error) {
-    console.error('Analytics API error:', error)
+    console.error('Analytics export error:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
