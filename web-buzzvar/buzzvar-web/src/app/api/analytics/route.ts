@@ -1,14 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase'
+import { auth, getUserRole, isAdmin, isVenueOwner } from '@/lib/auth/better-auth-server'
 import { AdminService } from '@/services/adminService'
 import { AnalyticsService } from '@/services/analyticsService'
+import { headers } from 'next/headers'
+import { Pool } from 'pg'
+
+const pool = new Pool({
+  connectionString: process.env.NEON_DATABASE_URL!,
+  ssl: process.env.NODE_ENV === 'production',
+})
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    })
 
-    if (authError || !user) {
+    if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -17,27 +25,26 @@ export async function GET(request: NextRequest) {
     const venueId = searchParams.get('venueId')
     const period = searchParams.get('period') || '7d'
 
-    // Check if user is admin for platform analytics
-    const adminEmails = process.env.ADMIN_EMAILS?.split(',') || []
-    const isAdmin = adminEmails.includes(user.email || '')
+    const userRole = await getUserRole(session.user.id)
+    const userIsAdmin = await isAdmin(session.user.id)
 
     switch (type) {
       case 'platform':
-        if (!isAdmin) {
+        if (!userIsAdmin) {
           return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
         }
         const platformAnalytics = await AdminService.getPlatformAnalytics()
         return NextResponse.json({ data: platformAnalytics })
 
       case 'system-health':
-        if (!isAdmin) {
+        if (!userIsAdmin) {
           return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
         }
         const systemHealth = await AdminService.getSystemHealthMetrics()
         return NextResponse.json({ data: systemHealth })
 
       case 'real-time':
-        if (!isAdmin) {
+        if (!userIsAdmin) {
           return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
         }
         const realTimeMetrics = await AdminService.getRealTimeMetrics()
@@ -49,16 +56,19 @@ export async function GET(request: NextRequest) {
         }
         
         // Check if user owns the venue or is admin
-        if (!isAdmin) {
-          const { data: venueOwnership } = await supabase
-            .from('venue_owners')
-            .select('id')
-            .eq('venue_id', venueId)
-            .eq('user_id', user.id)
-            .single()
+        if (!userIsAdmin) {
+          const client = await pool.connect()
+          try {
+            const result = await client.query(`
+              SELECT id FROM venue_owners 
+              WHERE venue_id = $1 AND user_id = $2 AND is_active = true
+            `, [venueId, session.user.id])
 
-          if (!venueOwnership) {
-            return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+            if (result.rows.length === 0) {
+              return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+            }
+          } finally {
+            client.release()
           }
         }
 

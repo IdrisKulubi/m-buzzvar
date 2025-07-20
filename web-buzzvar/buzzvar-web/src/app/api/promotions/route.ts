@@ -1,19 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase'
-import { getUserRole } from '@/lib/auth'
+import { auth, getUserRole, isAdmin, isVenueOwner } from '@/lib/auth/better-auth-server'
+import { headers } from 'next/headers'
+import { Pool } from 'pg'
+
+const pool = new Pool({
+  connectionString: process.env.NEON_DATABASE_URL!,
+  ssl: process.env.NODE_ENV === 'production',
+})
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient()
-    const { data: { session } } = await supabase.auth.getSession()
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    })
 
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const userRole = await getUserRole(session.user.email!)
+    const userRole = await getUserRole(session.user.id)
+    const userIsAdmin = await isAdmin(session.user.id)
+    const userIsVenueOwner = await isVenueOwner(session.user.id)
     
-    if (userRole.role !== 'venue_owner' && userRole.role !== 'admin') {
+    if (!userIsVenueOwner && !userIsAdmin) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
@@ -26,42 +35,47 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'venue_id is required' }, { status: 400 })
     }
 
-    // Check if user owns the venue (unless admin)
-    if (userRole.role === 'venue_owner') {
-      const { data: ownership } = await supabase
-        .from('venue_owners')
-        .select('id')
-        .eq('user_id', session.user.id)
-        .eq('venue_id', venueId)
-        .single()
+    const client = await pool.connect()
+    try {
+      // Check if user owns the venue (unless admin)
+      if (!userIsAdmin) {
+        const ownershipResult = await client.query(`
+          SELECT id FROM venue_owners 
+          WHERE user_id = $1 AND venue_id = $2 AND is_active = true
+        `, [session.user.id, venueId])
 
-      if (!ownership) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+        if (ownershipResult.rows.length === 0) {
+          return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+        }
       }
+
+      let query = `
+        SELECT * FROM promotions 
+        WHERE venue_id = $1
+      `
+      const params = [venueId]
+      let paramIndex = 2
+
+      if (type) {
+        query += ` AND promotion_type = $${paramIndex}`
+        params.push(type)
+        paramIndex++
+      }
+
+      if (isActive !== null) {
+        query += ` AND is_active = $${paramIndex}`
+        params.push(isActive === 'true')
+        paramIndex++
+      }
+
+      query += ` ORDER BY created_at DESC`
+
+      const result = await client.query(query, params)
+
+      return NextResponse.json({ data: result.rows })
+    } finally {
+      client.release()
     }
-
-    let query = supabase
-      .from('promotions')
-      .select('*')
-      .eq('venue_id', venueId)
-
-    if (type) {
-      query = query.eq('promotion_type', type)
-    }
-
-    if (isActive !== null) {
-      query = query.eq('is_active', isActive === 'true')
-    }
-
-    query = query.order('created_at', { ascending: false })
-
-    const { data: promotions, error } = await query
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
-
-    return NextResponse.json({ data: promotions })
   } catch (error) {
     console.error('Promotions API error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -70,16 +84,19 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createClient()
-    const { data: { session } } = await supabase.auth.getSession()
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    })
 
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const userRole = await getUserRole(session.user.email!)
+    const userRole = await getUserRole(session.user.id)
+    const userIsAdmin = await isAdmin(session.user.id)
+    const userIsVenueOwner = await isVenueOwner(session.user.id)
     
-    if (userRole.role !== 'venue_owner' && userRole.role !== 'admin') {
+    if (!userIsVenueOwner && !userIsAdmin) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
@@ -90,42 +107,35 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    // Check if user owns the venue (unless admin)
-    if (userRole.role === 'venue_owner') {
-      const { data: ownership } = await supabase
-        .from('venue_owners')
-        .select('id')
-        .eq('user_id', session.user.id)
-        .eq('venue_id', venue_id)
-        .single()
+    const client = await pool.connect()
+    try {
+      // Check if user owns the venue (unless admin)
+      if (!userIsAdmin) {
+        const ownershipResult = await client.query(`
+          SELECT id FROM venue_owners 
+          WHERE user_id = $1 AND venue_id = $2 AND is_active = true
+        `, [session.user.id, venue_id])
 
-      if (!ownership) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+        if (ownershipResult.rows.length === 0) {
+          return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+        }
       }
+
+      const result = await client.query(`
+        INSERT INTO promotions (
+          venue_id, title, description, start_date, end_date, 
+          days_of_week, start_time, end_time, promotion_type, is_active
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        RETURNING *
+      `, [
+        venue_id, title, description, start_date, end_date,
+        days_of_week, start_time || null, end_time || null, promotion_type, true
+      ])
+
+      return NextResponse.json({ data: result.rows[0] }, { status: 201 })
+    } finally {
+      client.release()
     }
-
-    const { data: promotion, error } = await supabase
-      .from('promotions')
-      .insert({
-        venue_id,
-        title,
-        description,
-        start_date,
-        end_date,
-        days_of_week,
-        start_time: start_time || null,
-        end_time: end_time || null,
-        promotion_type,
-        is_active: true
-      })
-      .select()
-      .single()
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
-
-    return NextResponse.json({ data: promotion }, { status: 201 })
   } catch (error) {
     console.error('Promotions API error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

@@ -1,104 +1,77 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { createClient } from '@/lib/supabase'
-import { UserWithRole } from '@/lib/types'
+import { useAuthRole, authClient } from '@/lib/auth/better-auth-client-web'
 
 export function useAuth() {
-  const [user, setUser] = useState<UserWithRole | null>(null)
-  const [loading, setLoading] = useState(true)
+  const { user, role, isLoading, isAdmin, isVenueOwner, isAuthenticated } = useAuthRole()
 
-  const fetchUserWithRole = useCallback(async () => {
-    try {
-      const response = await fetch('/api/auth')
-      if (response.ok) {
-        const { user } = await response.json()
-        setUser(user)
-      } else {
-        setUser(null)
-      }
-    } catch (error) {
-      console.error('Error fetching user:', error)
-      setUser(null)
-    } finally {
-      setLoading(false)
+  const signInWithGoogle = async () => {
+    const data = await authClient.signIn.social({
+      provider: "google",
+      callbackURL: "/dashboard",
+    })
+    
+    if (data.error) {
+      throw new Error(data.error.message)
     }
-  }, [])
+  }
 
-  const signInWithGoogle = useCallback(async () => {
-    const supabase = createClient()
+  const signInWithEmail = async (email: string, password: string) => {
+    const data = await authClient.signIn.email({
+      email,
+      password,
+      callbackURL: "/dashboard",
+    })
     
-    // Get the current URL to determine the correct redirect
-    const currentUrl = window.location.origin
-    const redirectUrl = `${currentUrl}/api/auth/callback`
+    if (data.error) {
+      throw new Error(data.error.message)
+    }
+  }
+
+  const signUpWithEmail = async (email: string, password: string, name?: string) => {
+    const data = await authClient.signUp.email({
+      email,
+      password,
+      name,
+      callbackURL: "/dashboard",
+    })
     
-    console.log('Current URL:', currentUrl)
-    console.log('Redirect URL:', redirectUrl)
-    console.log('Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL)
-    
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: redirectUrl,
-        queryParams: {
-          access_type: 'offline',
-          prompt: 'select_account',
+    if (data.error) {
+      throw new Error(data.error.message)
+    }
+  }
+
+  const signOut = async () => {
+    await authClient.signOut({
+      fetchOptions: {
+        onSuccess: () => {
+          window.location.href = '/login'
         },
-        scopes: 'email profile',
       },
     })
+  }
 
-    if (error) {
-      console.error('Error signing in with Google:', error)
-      throw error
-    }
-  }, [])
-
-  const signOut = useCallback(async () => {
-    try {
-      const response = await fetch('/api/auth', {
-        method: 'DELETE',
-      })
-
-      if (response.ok) {
-        setUser(null)
-        // Redirect to login page
-        window.location.href = '/login'
-      } else {
-        throw new Error('Failed to sign out')
-      }
-    } catch (error) {
-      console.error('Error signing out:', error)
-      throw error
-    }
-  }, [])
-
-  useEffect(() => {
-    const supabase = createClient()
-
-    // Get initial session
-    fetchUserWithRole()
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          await fetchUserWithRole()
-        } else if (event === 'SIGNED_OUT') {
-          setUser(null)
-          setLoading(false)
-        }
-      }
-    )
-
-    return () => subscription.unsubscribe()
-  }, [fetchUserWithRole])
+  const refetch = async () => {
+    // Better Auth automatically handles session refetching
+    window.location.reload()
+  }
 
   return { 
-    user, 
-    loading, 
-    signInWithGoogle, 
+    user: user ? {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: role || 'user',
+      avatar_url: user.image,
+    } : null,
+    loading: isLoading,
+    isAdmin,
+    isVenueOwner,
+    isAuthenticated,
+    signInWithGoogle,
+    signInWithEmail,
+    signUpWithEmail,
     signOut,
-    refetch: fetchUserWithRole
+    refetch
   }
 }

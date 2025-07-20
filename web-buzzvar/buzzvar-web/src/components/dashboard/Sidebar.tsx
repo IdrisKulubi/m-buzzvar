@@ -22,7 +22,13 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
 interface SidebarProps {
-  userRole: UserWithRole
+  user: {
+    id: string
+    email: string
+    name?: string | null
+    image?: string | null
+    role: string
+  }
 }
 
 interface NavItem {
@@ -35,53 +41,53 @@ interface NavItem {
 const navItems: NavItem[] = [
   {
     title: 'Dashboard',
-    href: '/',
+    href: '/dashboard',
     icon: Home,
-    roles: ['admin', 'venue_owner', 'user']
+    roles: ['admin', 'super_admin', 'venue_owner', 'user']
   },
   {
     title: 'Venue Management',
     href: '/venue',
     icon: Building2,
-    roles: ['admin', 'venue_owner']
+    roles: ['admin', 'super_admin', 'venue_owner']
   },
   {
     title: 'Promotions',
     href: '/promotions',
     icon: Megaphone,
-    roles: ['admin', 'venue_owner']
+    roles: ['admin', 'super_admin', 'venue_owner']
   },
   {
     title: 'Analytics',
     href: '/analytics',
     icon: BarChart3,
-    roles: ['admin', 'venue_owner']
+    roles: ['admin', 'super_admin', 'venue_owner']
   },
   {
     title: 'Admin Panel',
     href: '/admin',
     icon: Shield,
-    roles: ['admin']
+    roles: ['admin', 'super_admin']
   },
   {
     title: 'User Management',
     href: '/admin/users',
     icon: Users,
-    roles: ['admin']
+    roles: ['admin', 'super_admin']
   },
   {
     title: 'Venue Management',
     href: '/admin/venues',
     icon: Building2,
-    roles: ['admin']
+    roles: ['admin', 'super_admin']
   }
 ]
 
-function SidebarContent({ userRole, onLinkClick }: { userRole: UserWithRole; onLinkClick?: () => void }) {
+function SidebarContent({ user, onLinkClick }: { user: SidebarProps['user']; onLinkClick?: () => void }) {
   const pathname = usePathname()
 
   const filteredNavItems = navItems.filter(item => 
-    item.roles.includes(userRole.role)
+    item.roles.includes(user.role)
   )
 
   return (
@@ -119,44 +125,29 @@ function SidebarContent({ userRole, onLinkClick }: { userRole: UserWithRole; onL
         </nav>
       </div>
       
-      {userRole.role === 'venue_owner' && userRole.venues && userRole.venues.length > 0 && (
+      {/* TODO: Add venue list for venue owners */}
+      {user.role === 'venue_owner' && (
         <div className="px-6 pb-6 mt-auto">
           <h3 className="text-sm font-medium text-muted-foreground mb-3">
             My Venues
           </h3>
-          <ScrollArea className="max-h-48">
-            <div className="space-y-1">
-              {userRole.venues.map((venue) => (
-                <Link
-                  key={venue.venue_id}
-                  href={`/venue/${venue.venue_id}`}
-                  onClick={onLinkClick}
-                  className={cn(
-                    'block px-3 py-2 text-sm rounded-lg transition-colors',
-                    pathname === `/venue/${venue.venue_id}`
-                      ? 'bg-muted text-foreground'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                  )}
-                >
-                  {venue.venue.name}
-                </Link>
-              ))}
-            </div>
-          </ScrollArea>
+          <div className="text-xs text-muted-foreground">
+            Venue list will be loaded dynamically
+          </div>
         </div>
       )}
     </div>
   )
 }
 
-export function Sidebar({ userRole }: SidebarProps) {
+export function Sidebar({ user }: SidebarProps) {
   const [mobileOpen, setMobileOpen] = useState(false)
 
   return (
     <>
       {/* Desktop Sidebar */}
       <div className="hidden lg:flex lg:w-64 lg:flex-col lg:fixed lg:inset-y-0 lg:z-50 lg:bg-card lg:border-r">
-        <SidebarContent userRole={userRole} />
+        <SidebarContent user={user} />
       </div>
 
       {/* Mobile Sidebar */}
@@ -173,7 +164,7 @@ export function Sidebar({ userRole }: SidebarProps) {
         </SheetTrigger>
         <SheetContent side="left" className="p-0 w-64">
           <SidebarContent 
-            userRole={userRole} 
+            user={user} 
             onLinkClick={() => setMobileOpen(false)} 
           />
         </SheetContent>

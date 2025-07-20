@@ -1,7 +1,5 @@
 'use client'
 
-import { UserWithRole } from '@/lib/types'
-import { useAuthContext } from '@/components/auth/AuthProvider'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { 
@@ -14,17 +12,22 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ModeToggle } from '@/components/themes/mode-toggle'
 import { LogOut, User, Settings } from 'lucide-react'
+import { signOutAction } from '@/lib/actions/auth-actions'
 
 interface HeaderProps {
-  userRole: UserWithRole
+  user: {
+    id: string
+    email: string
+    name?: string | null
+    image?: string | null
+    role: string
+  }
 }
 
-export function Header({ userRole }: HeaderProps) {
-  const { signOut } = useAuthContext()
-
+export function Header({ user }: HeaderProps) {
   const handleSignOut = async () => {
     try {
-      await signOut()
+      await signOutAction()
     } catch (error) {
       console.error('Error signing out:', error)
     }
@@ -41,6 +44,8 @@ export function Header({ userRole }: HeaderProps) {
     switch (role) {
       case 'admin':
         return 'Administrator'
+      case 'super_admin':
+        return 'Super Administrator'
       case 'venue_owner':
         return 'Venue Owner'
       default:
@@ -64,9 +69,9 @@ export function Header({ userRole }: HeaderProps) {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="relative h-8 w-8 rounded-full">
                 <Avatar className="h-8 w-8">
-                  <AvatarImage src={userRole.avatar_url || undefined} alt={userRole.name || userRole.email} />
+                  <AvatarImage src={user.image || undefined} alt={user.name || user.email} />
                   <AvatarFallback>
-                    {getUserInitials(userRole.name, userRole.email)}
+                    {getUserInitials(user.name, user.email)}
                   </AvatarFallback>
                 </Avatar>
               </Button>
@@ -75,13 +80,13 @@ export function Header({ userRole }: HeaderProps) {
               <DropdownMenuLabel className="font-normal">
                 <div className="flex flex-col space-y-1">
                   <p className="text-sm font-medium leading-none">
-                    {userRole.name || 'User'}
+                    {user.name || 'User'}
                   </p>
                   <p className="text-xs leading-none text-muted-foreground">
-                    {userRole.email}
+                    {user.email}
                   </p>
                   <p className="text-xs leading-none text-muted-foreground">
-                    {getRoleLabel(userRole.role)}
+                    {getRoleLabel(user.role)}
                   </p>
                 </div>
               </DropdownMenuLabel>

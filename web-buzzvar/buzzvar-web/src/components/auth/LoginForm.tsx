@@ -3,24 +3,47 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { useAuthContext } from './AuthProvider'
+import { signInWithEmailAction } from '@/lib/actions/auth-actions'
 import { Loader2 } from 'lucide-react'
 
 export function LoginForm() {
-  const [isLoading, setIsLoading] = useState(false)
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false)
+  const [isEmailLoading, setIsEmailLoading] = useState(false)
   const { signInWithGoogle } = useAuthContext()
 
   const handleGoogleSignIn = async () => {
     try {
-      setIsLoading(true)
+      setIsGoogleLoading(true)
       await signInWithGoogle()
     } catch (error) {
       console.error('Sign in error:', error)
-      setIsLoading(false)
+      setIsGoogleLoading(false)
       
       // Show user-friendly error message
       const errorMessage = error instanceof Error ? error.message : 'Failed to sign in with Google'
       alert(`Sign-in failed: ${errorMessage}\n\nPlease check the browser console for more details.`)
+    }
+  }
+
+  const handleEmailSignIn = async (formData: FormData) => {
+    setIsEmailLoading(true)
+    try {
+      const email = formData.get('email') as string
+      const password = formData.get('password') as string
+      
+      const result = await signInWithEmailAction(email, password)
+      
+      if (result?.error) {
+        alert(`Sign-in failed: ${result.error}`)
+      }
+    } catch (error) {
+      console.error('Email sign in error:', error)
+      alert('Failed to sign in with email')
+    } finally {
+      setIsEmailLoading(false)
     }
   }
 
@@ -33,13 +56,67 @@ export function LoginForm() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Email Sign In Form */}
+        <form action={handleEmailSignIn} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="email">Email</Label>
+            <Input
+              id="email"
+              name="email"
+              type="email"
+              placeholder="Enter your email"
+              required
+              disabled={isEmailLoading}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="password">Password</Label>
+            <Input
+              id="password"
+              name="password"
+              type="password"
+              placeholder="Enter your password"
+              required
+              disabled={isEmailLoading}
+            />
+          </div>
+          <Button 
+            type="submit"
+            disabled={isEmailLoading || isGoogleLoading}
+            className="w-full"
+            size="lg"
+          >
+            {isEmailLoading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Signing in...
+              </>
+            ) : (
+              'Sign In with Email'
+            )}
+          </Button>
+        </form>
+
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t" />
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-background px-2 text-muted-foreground">
+              Or continue with
+            </span>
+          </div>
+        </div>
+
+        {/* Google Sign In */}
         <Button 
           onClick={handleGoogleSignIn}
-          disabled={isLoading}
+          disabled={isGoogleLoading || isEmailLoading}
+          variant="outline"
           className="w-full"
           size="lg"
         >
-          {isLoading ? (
+          {isGoogleLoading ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               Signing in...

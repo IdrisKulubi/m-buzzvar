@@ -1,24 +1,67 @@
 'use client'
 
 import React, { createContext, useContext, ReactNode } from 'react'
-import { useAuth } from '@/hooks/useAuth'
-import { UserWithRole } from '@/lib/types'
+import { authClient, useSession } from '@/lib/auth/better-auth-client-web'
 
 interface AuthContextType {
-  user: UserWithRole | null
+  user: any | null
   loading: boolean
+  isAuthenticated: boolean
   signInWithGoogle: () => Promise<void>
+  signInWithEmail: (email: string, password: string) => Promise<void>
+  signUpWithEmail: (email: string, password: string, name?: string) => Promise<void>
   signOut: () => Promise<void>
-  refetch: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const auth = useAuth()
+  const { data: session, isPending } = useSession()
+
+  const signInWithGoogle = async () => {
+    await authClient.signIn.social({
+      provider: "google",
+      callbackURL: "/dashboard",
+    })
+  }
+
+  const signInWithEmail = async (email: string, password: string) => {
+    await authClient.signIn.email({
+      email,
+      password,
+      callbackURL: "/dashboard",
+    })
+  }
+
+  const signUpWithEmail = async (email: string, password: string, name?: string) => {
+    await authClient.signUp.email({
+      email,
+      password,
+      name: name || email.split('@')[0],
+      callbackURL: "/dashboard",
+    })
+  }
+
+  const signOut = async () => {
+    await authClient.signOut({
+      fetchOptions: {
+        onSuccess: () => {
+          window.location.href = '/login'
+        },
+      },
+    })
+  }
 
   return (
-    <AuthContext.Provider value={auth}>
+    <AuthContext.Provider value={{
+      user: session?.user || null,
+      loading: isPending,
+      isAuthenticated: !!session?.user,
+      signInWithGoogle,
+      signInWithEmail,
+      signUpWithEmail,
+      signOut,
+    }}>
       {children}
     </AuthContext.Provider>
   )
@@ -30,27 +73,4 @@ export function useAuthContext() {
     throw new Error('useAuthContext must be used within an AuthProvider')
   }
   return context
-}
-
-// Helper hooks for role checking
-export function useIsAdmin() {
-  const { user } = useAuthContext()
-  return user?.role === 'admin'
-}
-
-export function useIsVenueOwner() {
-  const { user } = useAuthContext()
-  return user?.role === 'venue_owner'
-}
-
-export function useCanAccessVenue(venueId: string) {
-  const { user } = useAuthContext()
-  
-  if (!user) return false
-  if (user.role === 'admin') return true
-  if (user.role === 'venue_owner' && user.venues) {
-    return user.venues.some(venue => venue.venue_id === venueId)
-  }
-  
-  return false
 }
