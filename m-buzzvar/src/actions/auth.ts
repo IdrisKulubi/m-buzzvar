@@ -1,10 +1,16 @@
-import { supabase } from '../lib/supabase'
-import * as AuthSession from 'expo-auth-session'
-import * as WebBrowser from 'expo-web-browser'
-import { Platform } from 'react-native'
-
-// Configure WebBrowser for OAuth
-WebBrowser.maybeCompleteAuthSession()
+// Legacy auth actions - DEPRECATED
+// Use standalone-actions.ts instead
+import { 
+  signInWithEmail as standaloneSignInWithEmail,
+  signUpWithEmail as standaloneSignUpWithEmail,
+  signInWithGoogle as standaloneSignInWithGoogle,
+  signOut as standaloneSignOut,
+  createUserProfile as standaloneCreateUserProfile,
+  getUserProfile as standaloneGetUserProfile,
+  updateUserProfile as standaloneUpdateUserProfile,
+  checkUserProfile as standaloneCheckUserProfile,
+  resetPassword as standaloneResetPassword,
+} from './standalone-actions';
 
 export interface UserProfileData {
   id: string

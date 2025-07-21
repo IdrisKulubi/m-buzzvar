@@ -6,7 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/src/lib/hooks';
 import Button from '../src/components/Button';
 import Input from '../src/components/Input';
-import { createUserProfile } from '../src/actions/auth';
+import { createUserProfile } from '../src/actions/standalone-actions';
 import { Colors } from '../constants/Colors';
 
 export default function SetupProfilePage() {

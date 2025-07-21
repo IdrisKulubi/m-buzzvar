@@ -1,4 +1,4 @@
-import { supabase } from "../lib/supabase";
+import { mobileDb as standaloneDb } from "../lib/database/mobile-database-service";
 import * as Location from "expo-location";
 
 export interface Venue {
@@ -574,11 +574,15 @@ export async function addVibeCheck({
     });
 
     // Get venue details for location verification
-    const { data: venue, error: venueError } = await supabase
-      .from("venues")
-      .select("*")
-      .eq("id", venueId)
-      .single();
+    const { data: venue, error: venueError } = await standaloneDb.query<Venue[]>(
+      `SELECT * FROM venues WHERE id = $1 LIMIT 1`,
+      [venueId]
+    ).then(result => {
+      return { 
+        data: result[0] || null, 
+        error: result.length === 0 ? new Error('Venue not found') : null 
+      };
+    });
 
     if (venueError || !venue) {
       return { data: null, error: { message: "Venue not found." } };
@@ -612,13 +616,16 @@ export async function addVibeCheck({
     const oneHourAgo = new Date();
     oneHourAgo.setHours(oneHourAgo.getHours() - 1);
 
-    const { data: existingVibeCheck } = await supabase
-      .from("vibe_checks")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("venue_id", venueId)
-      .gte("created_at", oneHourAgo.toISOString())
-      .single();
+    const existingVibeChecks = await standaloneDb.query<{id: string}[]>(
+      `SELECT id FROM vibe_checks 
+       WHERE user_id = $1 
+       AND venue_id = $2 
+       AND created_at >= $3
+       LIMIT 1`,
+      [userId, venueId, oneHourAgo.toISOString()]
+    );
+    
+    const existingVibeCheck = existingVibeChecks.length > 0 ? existingVibeChecks[0] : null;
 
     if (existingVibeCheck) {
       return {
@@ -631,18 +638,26 @@ export async function addVibeCheck({
     }
 
     // Insert the vibe check
-    const { data, error } = await supabase
-      .from("vibe_checks")
-      .insert({
-        venue_id: venueId,
-        user_id: userId,
-        busyness_rating: busyness_rating,
-        comment: comment?.trim() || null,
-        user_latitude: location.coords.latitude,
-        user_longitude: location.coords.longitude,
-      })
-      .select()
-      .single();
+    const vibeCheckId = `vibe_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    const result = await standaloneDb.query<any[]>(
+      `INSERT INTO vibe_checks 
+       (id, venue_id, user_id, rating, comment, user_latitude, user_longitude, created_at, updated_at) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW()) 
+       RETURNING *`,
+      [
+        vibeCheckId,
+        venueId,
+        userId,
+        busyness_rating,
+        comment?.trim() || null,
+        location.coords.latitude,
+        location.coords.longitude
+      ]
+    );
+    
+    const data = result.length > 0 ? result[0] : null;
+    const error = result.length === 0 ? new Error('Failed to insert vibe check') : null;
 
     if (error) {
       console.error("Error adding vibe check:", error);

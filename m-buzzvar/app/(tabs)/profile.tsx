@@ -15,7 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { Colors } from "@/constants/Colors";
 import { useAuth } from "@/src/lib/hooks";
-import { getUserProfile, signOut } from "@/src/actions/auth";
+import { getUserProfile } from "@/src/actions/standalone-actions";
 import Button from "@/src/components/Button";
 import ProfileSkeleton from "@/components/skeletons/ProfileSkeleton";
 

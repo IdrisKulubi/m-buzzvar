@@ -1,5 +1,4 @@
 import * as ImageManipulator from 'expo-image-manipulator';
-import { supabase } from '../lib/supabase';
 
 export interface PhotoUploadProgress {
   loaded: number;

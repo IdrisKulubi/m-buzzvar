@@ -1,6 +1,5 @@
-import React, { createContext, useContext } from 'react'
-import { authClient, useAuthRole } from '@/lib/auth/better-auth-client-mobile'
-import type { User } from 'better-auth/types'
+import React, { createContext, useContext, useEffect, useState } from 'react'
+import { standaloneAuth, type User, type AuthState } from '@/lib/auth/standalone-auth'
 
 // Auth context
 interface AuthContextType {
@@ -12,43 +11,95 @@ interface AuthContextType {
   isVenueOwner: boolean
   isAuthenticated: boolean
   signOut: () => Promise<{ error: any }>
+  signInWithEmail: (email: string, password: string) => Promise<{ user: User | null; error: Error | null }>
+  signUpWithEmail: (email: string, password: string, name: string) => Promise<{ user: User | null; error: Error | null }>
+  signInWithGoogle: () => Promise<{ user: User | null; error: Error | null }>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-// Auth Provider component using Better Auth
+// Auth Provider component using Standalone Auth
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { data: session, isPending } = authClient.useSession()
-  const { role, user, isLoading, isAdmin, isVenueOwner, isAuthenticated } = useAuthRole()
+  const [authState, setAuthState] = useState<AuthState>({
+    user: null,
+    session: null,
+    loading: true,
+    isAuthenticated: false,
+  })
+
+  useEffect(() => {
+    // Subscribe to auth state changes
+    const unsubscribe = standaloneAuth.onAuthStateChange((state) => {
+      setAuthState(state)
+    })
+
+    // Get initial auth state
+    setAuthState(standaloneAuth.getAuthState())
+
+    return unsubscribe
+  }, [])
 
   const handleSignOut = async () => {
     try {
-      console.log('🔵 Better Auth: Starting sign out...')
+      console.log('🔵 Standalone Auth: Starting sign out...')
       
-      const result = await authClient.signOut()
+      const result = await standaloneAuth.signOut()
       
       if (result.error) {
-        console.error('🔴 Better Auth: Sign out error:', result.error)
+        console.error('🔴 Standalone Auth: Sign out error:', result.error)
         return { error: result.error }
       }
       
-      console.log('🟢 Better Auth: Sign out successful')
+      console.log('🟢 Standalone Auth: Sign out successful')
       return { error: null }
     } catch (error) {
-      console.error('🔴 Better Auth: Sign out failed:', error)
+      console.error('🔴 Standalone Auth: Sign out failed:', error)
       return { error }
     }
   }
 
-  const value = {
-    session,
-    user: user || session?.user || null,
-    loading: isPending || isLoading,
-    role,
-    isAdmin,
-    isVenueOwner,
-    isAuthenticated,
+  const handleSignInWithEmail = async (email: string, password: string) => {
+    try {
+      console.log('🔵 Standalone Auth: Starting email sign in...')
+      return await standaloneAuth.signInWithEmail(email, password)
+    } catch (error) {
+      console.error('🔴 Standalone Auth: Email sign in failed:', error)
+      return { user: null, error: error as Error }
+    }
+  }
+
+  const handleSignUpWithEmail = async (email: string, password: string, name: string) => {
+    try {
+      console.log('🔵 Standalone Auth: Starting email sign up...')
+      return await standaloneAuth.signUpWithEmail(email, password, name)
+    } catch (error) {
+      console.error('🔴 Standalone Auth: Email sign up failed:', error)
+      return { user: null, error: error as Error }
+    }
+  }
+
+  const handleSignInWithGoogle = async () => {
+    try {
+      console.log('🔵 Standalone Auth: Starting Google sign in...')
+      return await standaloneAuth.signInWithGoogle()
+    } catch (error) {
+      console.error('🔴 Standalone Auth: Google sign in failed:', error)
+      return { user: null, error: error as Error }
+    }
+  }
+
+  const value: AuthContextType = {
+    session: authState.session,
+    user: authState.user,
+    loading: authState.loading,
+    role: authState.user?.role || null,
+    isAdmin: standaloneAuth.hasRole('admin'),
+    isVenueOwner: standaloneAuth.hasRole('venue_owner'),
+    isAuthenticated: authState.isAuthenticated,
     signOut: handleSignOut,
+    signInWithEmail: handleSignInWithEmail,
+    signUpWithEmail: handleSignUpWithEmail,
+    signInWithGoogle: handleSignInWithGoogle,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

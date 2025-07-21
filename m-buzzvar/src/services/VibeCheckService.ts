@@ -1,5 +1,4 @@
 import * as Location from "expo-location";
-import { supabase } from "../lib/supabase";
 import {
   VibeCheck,
   VibeCheckWithDetails,
@@ -13,6 +12,8 @@ import { ErrorFactory, AppError, RetryManager, ErrorParser } from "../lib/errors
 import { ConnectivityManager } from "../lib/connectivity";
 import { VibeCheckCacheService } from "./CacheService";
 import { OptimizedQueryService } from "./OptimizedQueryService";
+import { standaloneAuth } from "../../lib/auth/standalone-auth";
+import { standaloneDb } from "../../lib/database/standalone-db";
 
 export class VibeCheckService {
   /**
@@ -33,36 +34,23 @@ export class VibeCheckService {
       }
 
       // Get current user
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-      
-      if (userError) {
-        if (userError.message?.includes('JWT') || userError.message?.includes('expired')) {
-          throw ErrorFactory.authExpired();
-        }
-        throw ErrorFactory.authRequired();
-      }
+      const user = standaloneAuth.getUser();
       
       if (!user) {
         throw ErrorFactory.authRequired();
       }
 
       // Verify location against venue
-      const { data: venue, error: venueError } = await supabase
-        .from("venues")
-        .select("*")
-        .eq("id", data.venue_id)
-        .single();
+      const venueResult = await standaloneDb.query<any>(
+        `SELECT * FROM venues WHERE id = $1`,
+        [data.venue_id]
+      );
 
-      if (venueError) {
-        throw ErrorFactory.databaseError(`Venue lookup failed: ${venueError.message}`);
-      }
-      
-      if (!venue) {
+      if (venueResult.data.length === 0) {
         throw ErrorFactory.invalidInput('venue', 'Venue not found');
       }
+      
+      const venue = venueResult.data[0];
 
       const locationVerification =
         await LocationVerificationService.verifyUserAtVenue(
@@ -97,29 +85,29 @@ export class VibeCheckService {
       }
 
       // Create vibe check record
-      const vibeCheckData = {
-        venue_id: data.venue_id,
-        user_id: user.id,
-        busyness_rating: data.busyness_rating,
-        comment: data.comment || null,
-        photo_url: photoUrl,
-        user_latitude: userLocation.coords.latitude,
-        user_longitude: userLocation.coords.longitude,
-      };
+      const vibeCheckId = `vibe_${Date.now()}_${Math.random()
+        .toString(36)
+        .substring(2, 11)}`;
+        
+      const vibeCheckResult = await standaloneDb.query<VibeCheck>(
+        `INSERT INTO vibe_checks (id, user_id, venue_id, rating, comment, photo_url, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW()) 
+         RETURNING *`,
+        [
+          vibeCheckId,
+          user.id,
+          data.venue_id,
+          data.busyness_rating,
+          data.comment || null,
+          photoUrl,
+        ]
+      );
 
-      const { data: vibeCheck, error: insertError } = await supabase
-        .from("vibe_checks")
-        .insert(vibeCheckData)
-        .select()
-        .single();
-
-      if (insertError) {
-        // Handle specific database constraint errors
-        if (insertError.code === '23505') { // Unique constraint violation
-          throw ErrorFactory.rateLimited(3600000); // 1 hour
-        }
-        throw ErrorFactory.databaseError(insertError.message);
+      if (vibeCheckResult.data.length === 0) {
+        throw ErrorFactory.databaseError('Failed to create vibe check');
       }
+
+      const vibeCheck = vibeCheckResult.data[0];
 
       // Invalidate relevant cache entries
       await VibeCheckCacheService.invalidateOnVibeCheckCreate(data.venue_id);
@@ -342,32 +330,41 @@ export class VibeCheckService {
       const oneHourAgo = new Date();
       oneHourAgo.setHours(oneHourAgo.getHours() - 1);
 
-      const { data: vibeCheck, error } = await supabase
-        .from("vibe_checks")
-        .select(
-          `
-          *,
-          user:users(id, name, avatar_url),
-          venue:venues(id, name, address)
-        `
-        )
-        .eq("user_id", userId)
-        .eq("venue_id", venueId)
-        .gte("created_at", oneHourAgo.toISOString())
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
+      const vibeCheckResult = await standaloneDb.query<any>(
+        `SELECT 
+          vc.*,
+          u.name as user_name,
+          u.avatar_url as user_avatar_url,
+          v.name as venue_name,
+          v.address as venue_address
+         FROM vibe_checks vc
+         LEFT JOIN users u ON vc.user_id = u.id
+         LEFT JOIN venues v ON vc.venue_id = v.id
+         WHERE vc.user_id = $1 AND vc.venue_id = $2 AND vc.created_at >= $3
+         ORDER BY vc.created_at DESC
+         LIMIT 1`,
+        [userId, venueId, oneHourAgo.toISOString()]
+      );
 
-      if (error) {
-        if (error.code === "PGRST116") {
-          // No rows returned
-          return { data: null, error: null };
-        }
-        return { data: null, error: error.message };
+      if (vibeCheckResult.data.length === 0) {
+        return { data: null, error: null };
       }
 
-      const vibeCheckWithDetails =
-        this.transformToVibeCheckWithDetails(vibeCheck);
+      const rawData = vibeCheckResult.data[0];
+      const vibeCheckWithDetails = this.transformToVibeCheckWithDetails({
+        ...rawData,
+        user: {
+          id: rawData.user_id,
+          name: rawData.user_name,
+          avatar_url: rawData.user_avatar_url,
+        },
+        venue: {
+          id: rawData.venue_id,
+          name: rawData.venue_name,
+          address: rawData.venue_address,
+        },
+      });
+      
       return { data: vibeCheckWithDetails, error: null };
     } catch (error) {
       return {
@@ -386,23 +383,46 @@ export class VibeCheckService {
   static async updateVibeCheck(
     vibeCheckId: string,
     updates: Partial<
-      Pick<VibeCheck, "busyness_rating" | "comment" | "photo_url">
+      Pick<VibeCheck, "rating" | "comment" | "photo_url">
     >
   ): Promise<{ data: VibeCheck | null; error: any }> {
     try {
-      const { data: vibeCheck, error } = await supabase
-        .from("vibe_checks")
-        .update(updates)
-        .eq("id", vibeCheckId)
-        .select()
-        .single();
+      const setParts: string[] = [];
+      const values: any[] = [];
+      let paramIndex = 1;
 
-      if (error) {
-        return { data: null, error: error.message };
+      if (updates.rating !== undefined) {
+        setParts.push(`rating = $${paramIndex++}`);
+        values.push(updates.rating);
+      }
+      if (updates.comment !== undefined) {
+        setParts.push(`comment = $${paramIndex++}`);
+        values.push(updates.comment);
+      }
+      if (updates.photo_url !== undefined) {
+        setParts.push(`photo_url = $${paramIndex++}`);
+        values.push(updates.photo_url);
       }
 
-      return { data: vibeCheck, error: null };
+      if (setParts.length === 0) {
+        return { data: null, error: "No updates provided" };
+      }
+
+      setParts.push(`updated_at = NOW()`);
+      values.push(vibeCheckId);
+
+      const vibeCheckResult = await standaloneDb.query<VibeCheck>(
+        `UPDATE vibe_checks SET ${setParts.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+        values
+      );
+
+      if (vibeCheckResult.data.length === 0) {
+        return { data: null, error: "Vibe check not found" };
+      }
+
+      return { data: vibeCheckResult.data[0], error: null };
     } catch (error) {
+      console.error(error)
       return {
         data: null,
         error: "Failed to update vibe check. Please try again.",
@@ -419,17 +439,14 @@ export class VibeCheckService {
     vibeCheckId: string
   ): Promise<{ success: boolean; error: any }> {
     try {
-      const { error } = await supabase
-        .from("vibe_checks")
-        .delete()
-        .eq("id", vibeCheckId);
-
-      if (error) {
-        return { success: false, error: error.message };
-      }
+      const result = await standaloneDb.query<any>(
+        `DELETE FROM vibe_checks WHERE id = $1`,
+        [vibeCheckId]
+      );
 
       return { success: true, error: null };
     } catch (error) {
+      console.error("Failed to delete vibe check:", error);
       return {
         success: false,
         error: "Failed to delete vibe check. Please try again.",
@@ -471,12 +488,11 @@ export class VibeCheckService {
       id: rawData.id,
       venue_id: rawData.venue_id,
       user_id: rawData.user_id,
-      busyness_rating: rawData.busyness_rating,
+      rating: rawData.rating,
       comment: rawData.comment,
       photo_url: rawData.photo_url,
-      user_latitude: rawData.user_latitude,
-      user_longitude: rawData.user_longitude,
       created_at: rawData.created_at,
+      updated_at: rawData.updated_at,
       user: {
         id: rawData.user.id,
         name: rawData.user.name || "Anonymous",
@@ -532,6 +548,7 @@ export class VibeCheckService {
 
       return { data: stats, error: null };
     } catch (error) {
+      console.error(error)
       return {
         data: null,
         error: "Failed to fetch venue vibe stats. Please try again.",

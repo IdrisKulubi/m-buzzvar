@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import Button from '../components/Button'
 import Input from '../components/Input'
-import { signIn, signInWithGoogle } from '../actions/auth'
+import { standaloneAuth } from '../../lib/auth/standalone-auth'
 import { useAuth } from '../lib/hooks'
 
 interface LoginScreenProps {

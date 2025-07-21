@@ -1,10 +1,11 @@
 import React, { useMemo, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, useColorScheme, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Alert, TouchableWithoutFeedback, Keyboard, ActivityIndicator } from 'react-native';
+import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import { useAuth } from '../src/lib/hooks';
 import { useToast } from '../src/lib/ToastProvider';
-import { addVibeCheck } from '../src/actions/clubs';
+import { VibeCheckServiceStandalone } from '../src/services/VibeCheckServiceStandalone';
 
 const BUSYNESS_LEVELS = [
   { level: 1, label: 'Empty', icon: 'battery-dead' },
@@ -36,12 +37,20 @@ const AddVibeCheckSheet = ({ venueId, onSubmitted }: { venueId: string; onSubmit
     }
 
     setLoading(true);
-    const { error } = await addVibeCheck({
-      venueId,
-      userId: user.id,
-      busyness_rating: busyness,
-      comment,
+    
+    // Get current location for verification
+    const location = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.High,
     });
+    
+    const { error } = await VibeCheckServiceStandalone.createVibeCheck(
+      {
+        venue_id: venueId,
+        busyness_rating: busyness as 1 | 2 | 3 | 4 | 5,
+        comment,
+      },
+      location
+    );
     setLoading(false);
 
     if (error) {
@@ -59,7 +68,7 @@ const AddVibeCheckSheet = ({ venueId, onSubmitted }: { venueId: string; onSubmit
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.container}>
-          <Text style={styles.title}>How's the Vibe?</Text>
+          <Text style={styles.title}>How&apos;s the Vibe?</Text>
           
           <Text style={styles.label}>Busyness Level</Text>
           <View style={styles.busynessContainer}>

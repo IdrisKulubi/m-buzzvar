@@ -1,8 +1,5 @@
-import { RealtimeChannel } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
-import { VibeCheckWithDetails } from '../lib/types';
-import { VibeCheckService } from './VibeCheckService';
-import { OptimizedRealtimeService } from './OptimizedRealtimeService';
+import { VibeCheckWithDetails } from "../lib/types";
+import { OptimizedRealtimeService } from "./OptimizedRealtimeService";
 
 export interface RealtimeSubscriptionOptions {
   venueId?: string;
@@ -13,21 +10,11 @@ export interface RealtimeSubscriptionOptions {
 }
 
 export class VibeCheckRealtimeService {
-  private static subscriptions = new Map<string, RealtimeChannel>();
-
   /**
    * Initialize the optimized real-time service
    */
   static initialize(): void {
     OptimizedRealtimeService.initialize();
-  }
-
-  /**
-   * Clear all subscriptions (for testing purposes)
-   * @internal
-   */
-  static _clearSubscriptions(): void {
-    this.subscriptions.clear();
   }
 
   /**
@@ -58,7 +45,9 @@ export class VibeCheckRealtimeService {
    * @param subscriptionId Unique identifier for the subscription to remove
    * @returns Promise with unsubscribe result
    */
-  static async unsubscribe(subscriptionId: string): Promise<{ success: boolean; error?: string }> {
+  static async unsubscribe(
+    subscriptionId: string
+  ): Promise<{ success: boolean; error?: string }> {
     return await OptimizedRealtimeService.unsubscribe(subscriptionId);
   }
 
@@ -76,7 +65,7 @@ export class VibeCheckRealtimeService {
    */
   static getActiveSubscriptions(): string[] {
     const stats = OptimizedRealtimeService.getSubscriptionStats();
-    return stats.subscriptionDetails.map(detail => detail.id);
+    return stats.subscriptionDetails.map((detail) => detail.id);
   }
 
   /**
@@ -108,32 +97,36 @@ export class VibeCheckRealtimeService {
     const { eventType, new: newRecord, old: oldRecord } = payload;
 
     switch (eventType) {
-      case 'INSERT':
+      case "INSERT":
         if (newRecord && options.onVibeCheckInsert) {
-          const vibeCheckWithDetails = await this.fetchVibeCheckWithDetails(newRecord.id);
+          const vibeCheckWithDetails = await this.fetchVibeCheckWithDetails(
+            newRecord.id
+          );
           if (vibeCheckWithDetails) {
             options.onVibeCheckInsert(vibeCheckWithDetails);
           }
         }
         break;
 
-      case 'UPDATE':
+      case "UPDATE":
         if (newRecord && options.onVibeCheckUpdate) {
-          const vibeCheckWithDetails = await this.fetchVibeCheckWithDetails(newRecord.id);
+          const vibeCheckWithDetails = await this.fetchVibeCheckWithDetails(
+            newRecord.id
+          );
           if (vibeCheckWithDetails) {
             options.onVibeCheckUpdate(vibeCheckWithDetails);
           }
         }
         break;
 
-      case 'DELETE':
+      case "DELETE":
         if (oldRecord && options.onVibeCheckDelete) {
           options.onVibeCheckDelete(oldRecord.id);
         }
         break;
 
       default:
-        console.warn('Unknown realtime event type:', eventType);
+        console.warn("Unknown realtime event type:", eventType);
     }
   }
 
@@ -146,81 +139,16 @@ export class VibeCheckRealtimeService {
     vibeCheckId: string
   ): Promise<VibeCheckWithDetails | null> {
     try {
-      const { data: vibeCheck, error } = await supabase
-        .from('vibe_checks')
-        .select(`
-          *,
-          user:users(id, name, avatar_url),
-          venue:venues(id, name, address)
-        `)
-        .eq('id', vibeCheckId)
-        .single();
-
-      if (error || !vibeCheck) {
-        console.error('Error fetching vibe check details:', error);
-        return null;
-      }
-
-      // Use the existing transformation method from VibeCheckService
-      return this.transformToVibeCheckWithDetails(vibeCheck);
+      // For now, return null since we don't have a direct method to fetch by ID
+      // This method would need to be implemented based on your database layer
+      console.warn(
+        "fetchVibeCheckWithDetails not implemented - returning null"
+      );
+      return null;
     } catch (error) {
-      console.error('Error fetching vibe check details:', error);
+      console.error("Error fetching vibe check details:", error);
       return null;
     }
-  }
-
-  /**
-   * Transform raw vibe check data to VibeCheckWithDetails
-   * This mirrors the private method in VibeCheckService
-   * @param rawData Raw data from database query
-   * @returns Transformed VibeCheckWithDetails object
-   */
-  private static transformToVibeCheckWithDetails(rawData: any): VibeCheckWithDetails {
-    const createdAt = new Date(rawData.created_at);
-    const now = new Date();
-    const diffInMinutes = Math.floor(
-      (now.getTime() - createdAt.getTime()) / (1000 * 60)
-    );
-    const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
-
-    // Generate human-readable time ago string
-    let timeAgo: string;
-    if (diffInMinutes < 1) {
-      timeAgo = "Just now";
-    } else if (diffInMinutes < 60) {
-      timeAgo = `${diffInMinutes} minute${diffInMinutes === 1 ? "" : "s"} ago`;
-    } else if (diffInMinutes < 1440) {
-      // Less than 24 hours
-      const hours = Math.floor(diffInMinutes / 60);
-      timeAgo = `${hours} hour${hours === 1 ? "" : "s"} ago`;
-    } else {
-      const days = Math.floor(diffInMinutes / 1440);
-      timeAgo = `${days} day${days === 1 ? "" : "s"} ago`;
-    }
-
-    return {
-      id: rawData.id,
-      venue_id: rawData.venue_id,
-      user_id: rawData.user_id,
-      busyness_rating: rawData.busyness_rating,
-      comment: rawData.comment,
-      photo_url: rawData.photo_url,
-      user_latitude: rawData.user_latitude,
-      user_longitude: rawData.user_longitude,
-      created_at: rawData.created_at,
-      user: {
-        id: rawData.user.id,
-        name: rawData.user.name || "Anonymous",
-        avatar_url: rawData.user.avatar_url,
-      },
-      venue: {
-        id: rawData.venue.id,
-        name: rawData.venue.name || "Unknown Venue",
-        address: rawData.venue.address,
-      },
-      time_ago: timeAgo,
-      is_recent: createdAt > twoHoursAgo,
-    };
   }
 
   /**

@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import Button from '../components/Button'
 import Input from '../components/Input'
-import { resetPassword } from '../actions/auth'
+import { resetPassword } from '../actions/standalone-actions'
 
 interface ForgotPasswordScreenProps {
   onNavigateToLogin: () => void

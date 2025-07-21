@@ -15,7 +15,7 @@ import { ActivityIndicator, View, Text } from "react-native";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { ToastProvider } from "@/src/lib/ToastProvider";
 import { AuthProvider, useAuth } from "@/src/lib/auth-provider";
-import { checkUserProfile, setupDeepLinking } from "@/src/actions/better-auth-actions";
+import { checkUserProfile } from "@/src/actions/standalone-actions";
 import { Colors } from "@/constants/Colors";
 
 function RootLayoutNav() {
@@ -27,9 +27,8 @@ function RootLayoutNav() {
   const [authTimeout, setAuthTimeout] = useState(false);
 
   useEffect(() => {
-    // Set up deep linking for OAuth callbacks
-    const cleanup = setupDeepLinking()
-    return cleanup
+    // Deep linking is handled by the standalone auth system
+    console.log('🔵 App initialized with standalone auth');
   }, [])
 
   useEffect(() => {
