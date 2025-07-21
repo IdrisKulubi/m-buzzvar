@@ -21,7 +21,7 @@ export async function signInWithGoogle() {
     
     const result = await authClient.signIn.social({
       provider: 'google',
-      callbackURL: '/(tabs)', // This will be converted to deep link (buzzvar:///(tabs))
+      callbackURL: 'buzzvar://(tabs)', // Proper deep link format
     })
     
     if (result.error) {

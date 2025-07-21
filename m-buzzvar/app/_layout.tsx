@@ -9,8 +9,8 @@ import { StatusBar } from "expo-status-bar";
 import "react-native-reanimated";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
-import { useEffect } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, View, Text } from "react-native";
 
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { ToastProvider } from "@/src/lib/ToastProvider";
@@ -24,12 +24,26 @@ function RootLayoutNav() {
   const segments = useSegments();
   const colorScheme = useColorScheme() ?? "dark";
   const colors = Colors[colorScheme];
+  const [authTimeout, setAuthTimeout] = useState(false);
 
   useEffect(() => {
     // Set up deep linking for OAuth callbacks
     const cleanup = setupDeepLinking()
     return cleanup
   }, [])
+
+  useEffect(() => {
+    // Set a timeout for auth loading to prevent infinite loading
+    const timeout = setTimeout(() => {
+      if (loading) {
+        console.warn('Auth loading timeout - redirecting to login')
+        setAuthTimeout(true)
+        router.replace('/login')
+      }
+    }, 15000) // 15 second timeout
+
+    return () => clearTimeout(timeout)
+  }, [loading, router])
 
   useEffect(() => {
     // Wait until authentication status is confirmed
@@ -78,7 +92,7 @@ function RootLayoutNav() {
 
   // While loading auth state, we can show a spinner.
   // app/index.tsx will handle the initial splash animation.
-  if (loading) {
+  if (loading && !authTimeout) {
     return (
       <View
         style={{
@@ -89,6 +103,9 @@ function RootLayoutNav() {
         }}
       >
         <ActivityIndicator size="large" color={colors.tint} />
+        <Text style={{ color: colors.text, marginTop: 16 }}>
+          Connecting to server...
+        </Text>
       </View>
     );
   }
