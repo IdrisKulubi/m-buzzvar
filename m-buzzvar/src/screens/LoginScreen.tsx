@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -7,88 +7,120 @@ import {
   Platform,
   Alert,
   StyleSheet,
+  Image,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import Button from '../components/Button'
 import Input from '../components/Input'
 import { signIn, signInWithGoogle } from '../actions/auth'
+import { useAuth } from '../lib/hooks'
 
 interface LoginScreenProps {
-  onNavigateToSignUp: () => void
-  onNavigateToForgotPassword: () => void
+  onNavigateToSignUp: () => void;
+  onNavigateToForgotPassword: () => void;
 }
 
 export default function LoginScreen({
   onNavigateToSignUp,
   onNavigateToForgotPassword,
 }: LoginScreenProps) {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [googleLoading, setGoogleLoading] = useState(false)
-  const [errors, setErrors] = useState<{ email?: string; password?: string }>({})
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [errors, setErrors] = useState<{ email?: string; password?: string }>(
+    {}
+  );
 
   const validateForm = () => {
-    const newErrors: { email?: string; password?: string } = {}
+    const newErrors: { email?: string; password?: string } = {};
 
     if (!email.trim()) {
-      newErrors.email = 'Email is required'
+      newErrors.email = "Email is required";
     } else if (!/\S+@\S+\.\S+/.test(email)) {
-      newErrors.email = 'Please enter a valid email'
+      newErrors.email = "Please enter a valid email";
     }
 
     if (!password) {
-      newErrors.password = 'Password is required'
+      newErrors.password = "Password is required";
     } else if (password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters'
+      newErrors.password = "Password must be at least 6 characters";
     }
 
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
-  }
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleEmailLogin = async () => {
-    if (!validateForm()) return
+    if (!validateForm()) return;
 
-    setLoading(true)
+    setLoading(true);
     try {
-      const { data, error } = await signIn({ email: email.trim(), password })
+      const { user, error } = await signInWithEmail(email.trim(), password);
 
       if (error) {
-        Alert.alert('Login Failed', (error as any)?.message || 'An error occurred during login')
-      } else if (data?.user) {
+        Alert.alert(
+          "Login Failed",
+          error.message || "An error occurred during login"
+        );
+      } else if (user) {
         // Success - navigation will be handled by the auth state change
-        console.log('Login successful')
+        console.log("Login successful");
       }
     } catch (error) {
-      Alert.alert('Login Failed', 'An unexpected error occurred')
+      console.error("Login error:", error);
+      Alert.alert("Login Failed", "An unexpected error occurred");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const handleGoogleLogin = async () => {
-    setGoogleLoading(true)
+    setGoogleLoading(true);
     try {
-      const { data, error } = await signInWithGoogle()
+      const { user, error } = await signInWithGoogle();
 
       if (error) {
-        Alert.alert('Google Login Failed', (error as any)?.message || 'An error occurred during Google login')
-      } else if (data?.user) {
-        console.log('Google login successful')
+        console.error('🔴 LoginScreen: Google login error:', error.message);
+        
+        // Show user-friendly error messages
+        if (error.message.includes('not available') || error.message.includes('install and configure')) {
+          Alert.alert(
+            'Google Sign-In Unavailable', 
+            'Google Sign-In is not properly configured. Please use email login instead.',
+            [{ text: 'OK' }]
+          );
+        } else if (error.message.includes('cancelled')) {
+          // Don't show alert for user cancellation
+          console.log('🟡 LoginScreen: User cancelled Google sign-in');
+        } else if (error.message.includes('Play Services')) {
+          Alert.alert(
+            'Google Play Services Required', 
+            'Please update Google Play Services to use Google Sign-In.',
+            [{ text: 'OK' }]
+          );
+        } else {
+          Alert.alert(
+            "Google Login Failed",
+            error.message || "An error occurred during Google login"
+          );
+        }
+      } else if (user) {
+        console.log("🟢 LoginScreen: Google login successful for user:", user.email);
       }
     } catch (error) {
-      Alert.alert('Google Login Failed', 'An unexpected error occurred')
+      console.error('🔴 LoginScreen: Unexpected Google login error:', error);
+      Alert.alert("Google Login Failed", "An unexpected error occurred");
     } finally {
-      setGoogleLoading(false)
+      setGoogleLoading(false);
     }
-  }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.keyboardView}
       >
         <ScrollView
@@ -98,11 +130,11 @@ export default function LoginScreen({
           {/* Logo/Brand Section */}
           <View style={styles.header}>
             <View style={styles.logoContainer}>
-              <Text style={styles.logoText}>🎉</Text>
+              <Text style={styles.logoText}>✨</Text>
             </View>
-            <Text style={styles.title}>Welcome to Buzzvar</Text>
+            <Text style={styles.title}>hey bestie 👋</Text>
             <Text style={styles.subtitle}>
-              Discover clubs and create unforgettable party experiences
+              ready to find your vibe? let&apos;s get you logged in
             </Text>
           </View>
 
@@ -132,7 +164,7 @@ export default function LoginScreen({
             />
 
             <Button
-              title="Sign In"
+              title="let's go ✨"
               onPress={handleEmailLogin}
               loading={loading}
               disabled={googleLoading}
@@ -142,7 +174,7 @@ export default function LoginScreen({
 
             {/* Forgot Password */}
             <Button
-              title="Forgot Password?"
+              title="forgot password? no worries"
               onPress={onNavigateToForgotPassword}
               variant="outline"
               size="small"
@@ -153,29 +185,27 @@ export default function LoginScreen({
           {/* Divider */}
           <View style={styles.divider}>
             <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>OR</Text>
+            <Text style={styles.dividerText}>or</Text>
             <View style={styles.dividerLine} />
           </View>
 
           {/* Google Sign In */}
           <Button
-            title="Continue with Google"
+            title="sign in with google"
             onPress={handleGoogleLogin}
             variant="google"
             loading={googleLoading}
             disabled={loading}
             fullWidth
             size="large"
-            icon={
-              <Ionicons name="logo-google" size={20} color="#4285F4" />
-            }
+            icon={<Ionicons name="logo-google" size={20} color="#4285F4" />}
           />
 
           {/* Sign Up Link */}
           <View style={styles.footer}>
-            <Text style={styles.footerText}>Don't have an account? </Text>
+            <Text style={styles.footerText}>new here? </Text>
             <Button
-              title="Sign Up"
+              title="join the party"
               onPress={onNavigateToSignUp}
               variant="outline"
               size="small"
@@ -184,82 +214,94 @@ export default function LoginScreen({
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: "#0a0a0a", // Dark background for modern look
   },
   keyboardView: {
     flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingVertical: 32,
+    paddingHorizontal: 20,
+    paddingVertical: 40,
   },
   header: {
-    alignItems: 'center',
-    marginBottom: 48,
+    alignItems: "center",
+    marginBottom: 56,
+    marginTop: 20,
   },
   logoContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#ef4444',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 24,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: "transparent",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 20,
+    // Subtle gradient effect with border
+    borderWidth: 2,
+    borderColor: "#ff6b6b",
   },
   logoText: {
-    fontSize: 40,
+    fontSize: 32,
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    marginBottom: 8,
-    textAlign: 'center',
+    fontSize: 32,
+    fontWeight: "700",
+    color: "#ffffff",
+    marginBottom: 12,
+    textAlign: "center",
+    letterSpacing: -0.5,
   },
   subtitle: {
-    fontSize: 16,
-    color: '#6b7280',
-    textAlign: 'center',
-    lineHeight: 24,
+    fontSize: 17,
+    color: "#a1a1aa",
+    textAlign: "center",
+    lineHeight: 26,
+    fontWeight: "400",
+    maxWidth: 280,
   },
   form: {
-    marginBottom: 32,
+    marginBottom: 40,
+    gap: 20, // Modern spacing
   },
   forgotButton: {
-    alignSelf: 'center',
-    marginTop: 16,
+    alignSelf: "center",
+    marginTop: 20,
+    backgroundColor: "transparent",
   },
   divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 32,
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 36,
   },
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#e5e7eb',
+    backgroundColor: "#27272a",
   },
   dividerText: {
-    marginHorizontal: 16,
-    fontSize: 14,
-    color: '#9ca3af',
-    fontWeight: '500',
+    marginHorizontal: 20,
+    fontSize: 15,
+    color: "#71717a",
+    fontWeight: "500",
+    textTransform: "lowercase",
   },
   footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 32,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 40,
+    gap: 8,
   },
   footerText: {
     fontSize: 16,
-    color: '#6b7280',
+    color: "#a1a1aa",
+    fontWeight: "400",
   },
-}) 
+});

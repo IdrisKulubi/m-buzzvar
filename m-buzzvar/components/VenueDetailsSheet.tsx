@@ -23,9 +23,8 @@ import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import AddReviewSheet from "./AddReviewSheet";
 import VenueVibeSection from "./VenueVibeSection";
 import VibeCheckPostingFlow from "./VibeCheckPostingFlow";
-import { supabase } from "../src/lib/supabase";
 import { useAuth } from "../src/lib/hooks";
-import { VibeCheckRealtimeService } from "../src/services/VibeCheckRealtimeService";
+import { getVenueReviews, createReview } from "../src/actions/standalone-actions";
 
 function formatDistanceToNow(date: Date): string {
   const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
@@ -69,7 +68,7 @@ const ReviewItem = ({ review }: { review: any }) => {
     <View style={getStyles(colors).reviewItem}>
       <View style={getStyles(colors).reviewHeader}>
         <Text style={getStyles(colors).reviewAuthor}>
-          {review.users?.name || "Anonymous"}
+          {review.user_name || "Anonymous"}
         </Text>
         <StarRating rating={review.rating} size={14} color={colors.tint} />
       </View>
@@ -105,22 +104,18 @@ const VenueDetailsSheet = ({
   const fetchReviews = useCallback(
     async (limit: number | null = 3) => {
       setReviewsLoading(true);
-      let query = supabase
-        .from("reviews")
-        .select("*, users(name)")
-        .eq("venue_id", venue.id)
-        .order("created_at", { ascending: false });
-
-      if (limit) {
-        query = query.limit(limit);
-      }
-
-      const { data, error } = await query;
-
-      if (error) {
+      try {
+        const result = await getVenueReviews(venue.id, limit || 50);
+        if (result.error) {
+          console.error("Failed to fetch reviews:", result.error);
+          setReviews([]);
+        } else {
+          const reviewsData = limit ? result.data.slice(0, limit) : result.data;
+          setReviews(reviewsData);
+        }
+      } catch (error) {
         console.error("Failed to fetch reviews:", error);
-      } else {
-        setReviews(data);
+        setReviews([]);
       }
       setReviewsLoading(false);
     },
@@ -130,36 +125,7 @@ const VenueDetailsSheet = ({
   useEffect(() => {
     // Fetch initial preview
     fetchReviews(3);
-
-    // Set up real-time subscription for venue vibe checks with unique ID
-    const subscriptionId = `venue-details-${venue.id}-${Date.now()}`;
-
-    // Check if already subscribed to avoid multiple subscriptions
-    if (!VibeCheckRealtimeService.isSubscribed(subscriptionId)) {
-      VibeCheckRealtimeService.subscribeToVenue(subscriptionId, venue.id, {
-        onVibeCheckInsert: (vibeCheck: any) => {
-          // When a new vibe check is posted for this venue, refresh the data
-          onDataNeedsRefresh();
-        },
-        onVibeCheckUpdate: (vibeCheck: any) => {
-          // When a vibe check is updated for this venue, refresh the data
-          onDataNeedsRefresh();
-        },
-        onError: (error: any) => {
-          console.error("Real-time subscription error:", error);
-        },
-      }).catch((error) => {
-        console.error("Failed to set up real-time subscription:", error);
-      });
-    }
-
-    // Cleanup subscription on unmount
-    return () => {
-      VibeCheckRealtimeService.unsubscribe(subscriptionId).catch((error) => {
-        console.error("Failed to cleanup subscription:", error);
-      });
-    };
-  }, [fetchReviews, venue.id, onDataNeedsRefresh]);
+  }, [fetchReviews]);
 
   const handlePresentAddReview = () => addReviewSheetRef.current?.present();
   const handlePresentAddVibe = () => addVibeCheckSheetRef.current?.present();

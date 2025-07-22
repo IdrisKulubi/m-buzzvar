@@ -12,13 +12,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Image } from 'expo-image'
 import { Colors } from '@/constants/Colors'
-import { useAuth } from '@/src/lib/hooks'
-import { getUserProfile } from '@/src/actions/auth'
-import { getVenues, getUserBookmarks, getVenueReviewStats, VenueWithDistance } from '@/src/actions/clubs'
-import LiveIndicator from '@/components/LiveIndicator'
+import { useAuth } from '@/src/lib/auth-provider'
+import { getUserProfile, getVenues } from '@/src/actions/standalone-actions'
 import { Ionicons } from '@expo/vector-icons'
 import { router, useFocusEffect } from 'expo-router'
-import { supabase } from '@/src/lib/supabase'
 import { BottomSheetModal } from '@gorhom/bottom-sheet'
 import VenueDetailsSheet from '@/components/VenueDetailsSheet'
 import VibesSection from '@/components/VibesSection'
@@ -47,7 +44,7 @@ export default function HomeScreen() {
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [featuredVenues, setFeaturedVenues] = useState<VenueWithDistance[]>([])
+  const [featuredVenues, setFeaturedVenues] = useState<any[]>([])
   const [bookmarkedVenues, setBookmarkedVenues] = useState<any[]>([])
   
   // Bottom Sheet state
@@ -67,12 +64,9 @@ export default function HomeScreen() {
     }
 
     try {
-      const [profileResult, venuesResult, bookmarksResult] = await Promise.all([
+      const [profileResult, venuesResult] = await Promise.all([
         getUserProfile(user.id),
-        // Use the updated getVenues function that includes vibe check data
         getVenues(),
-        // Use the getUserBookmarks function instead of direct query
-        getUserBookmarks(user.id),
       ])
 
       if (profileResult.error) console.error('Error loading profile:', profileResult.error)
@@ -81,45 +75,12 @@ export default function HomeScreen() {
       if (venuesResult.error) {
         console.error('Error fetching venues:', venuesResult.error)
       } else {
-        const allVenues = venuesResult.data as VenueWithDistance[]
-        
-        // Fetch promotions for each venue
-        const venuesWithPromotions = await Promise.all(
-          allVenues.map(async (venue) => {
-            const { data: promotions } = await supabase
-              .from('promotions')
-              .select('*')
-              .eq('venue_id', venue.id)
-              .eq('is_active', true);
-            
-            return {
-              ...venue,
-              promotions: promotions || [],
-            };
-          })
-        );
-        
-        const featured = venuesWithPromotions.filter(v => v.promotions && v.promotions.length > 0)
-        setFeaturedVenues(featured.length > 0 ? featured : venuesWithPromotions.slice(0, 5))
+        const allVenues = venuesResult.data || []
+        setFeaturedVenues(allVenues.slice(0, 5))
       }
       
-      if (bookmarksResult.error) {
-        console.error('Error fetching bookmarks:', bookmarksResult.error)
-      } else {
-        // Add review stats to each bookmarked venue
-        const bookmarksWithStats = await Promise.all(
-          (bookmarksResult.data || []).map(async (venue: any) => {
-            // Get review stats for this venue using our helper function
-            const reviewStats = await getVenueReviewStats(venue.id);
-            return {
-              ...venue,
-              review_count: reviewStats.count,
-              average_rating: reviewStats.average,
-            };
-          })
-        );
-        setBookmarkedVenues(bookmarksWithStats)
-      }
+      // For now, set empty bookmarks - this can be implemented later
+      setBookmarkedVenues([])
 
     } catch (error) {
       console.error('Error loading dashboard data:', error)
@@ -308,7 +269,13 @@ export default function HomeScreen() {
   })
 
   if (loading) {
-    return <HomeScreenSkeleton />;
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <Text style={{ color: colors.text }}>Loading...</Text>
+        </View>
+      </SafeAreaView>
+    );
   }
 
   return (
@@ -350,17 +317,15 @@ export default function HomeScreen() {
                     <Text style={styles.promotionText}>Promotion</Text>
                   </View>
                 )}
-                {/* Live indicator positioned in top right */}
-                {(venue.has_live_activity || venue.recent_vibe_count > 0) && (
-                  <View style={styles.liveIndicatorContainer}>
-                    <LiveIndicator
-                      hasLiveActivity={venue.has_live_activity}
-                      averageBusyness={venue.average_recent_busyness}
-                      recentVibeCount={venue.recent_vibe_count}
-                      size="small"
-                    />
-                  </View>
-                )}
+                {/* Live indicator - simplified for now */}
+                <View style={styles.liveIndicatorContainer}>
+                  <View style={{ 
+                    backgroundColor: colors.tint, 
+                    width: 8, 
+                    height: 8, 
+                    borderRadius: 4 
+                  }} />
+                </View>
                 <View style={styles.featuredContent}>
                   <Text style={styles.featuredTitle} numberOfLines={1}>{venue.name}</Text>
                   <Text style={styles.featuredAddress} numberOfLines={1}>{venue.address}</Text>
@@ -370,8 +335,18 @@ export default function HomeScreen() {
           </ScrollView>
         </View>
 
-        {/* Live Vibes Section */}
-        <VibesSection onRefresh={loadDashboardData} />
+        {/* Live Vibes Section - Coming Soon */}
+        <View style={styles.sectionContainer}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Live Vibes</Text>
+          </View>
+          <View style={styles.emptyStateContainer}>
+            <Ionicons name="pulse-outline" size={32} color={colors.muted} />
+            <Text style={styles.emptyStateText}>
+              Live vibe updates coming soon!
+            </Text>
+          </View>
+        </View>
 
         {/* Bookmarked Venues */}
         <View style={styles.sectionContainer}>
@@ -398,24 +373,29 @@ export default function HomeScreen() {
         </View>
       </ScrollView>
 
-      <BottomSheetModal
-        ref={bottomSheetModalRef}
-        index={0}
-        snapPoints={snapPoints}
-        backgroundStyle={{ 
-          backgroundColor: colors.surface,
-          borderTopLeftRadius: 24,
-          borderTopRightRadius: 24,
-        }}
-        handleIndicatorStyle={{ backgroundColor: colors.muted }}
-      >
-        {selectedVenue && (
-          <VenueDetailsSheet 
-            venue={selectedVenue} 
-            onDataNeedsRefresh={loadDashboardData}
-          />
-        )}
-      </BottomSheetModal>
+      {/* Venue details modal - simplified for now */}
+      {selectedVenue && (
+        <BottomSheetModal
+          ref={bottomSheetModalRef}
+          index={0}
+          snapPoints={snapPoints}
+          backgroundStyle={{ 
+            backgroundColor: colors.surface,
+            borderTopLeftRadius: 24,
+            borderTopRightRadius: 24,
+          }}
+          handleIndicatorStyle={{ backgroundColor: colors.muted }}
+        >
+          <View style={{ padding: 20 }}>
+            <Text style={{ color: colors.text, fontSize: 18, fontWeight: 'bold' }}>
+              {selectedVenue.name}
+            </Text>
+            <Text style={{ color: colors.muted, marginTop: 8 }}>
+              {selectedVenue.address}
+            </Text>
+          </View>
+        </BottomSheetModal>
+      )}
     </SafeAreaView>
   )
 } 

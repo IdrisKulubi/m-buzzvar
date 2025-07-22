@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
-import { Session, User } from '@supabase/supabase-js'
 import * as Location from 'expo-location'
-import { supabase } from './supabase'
+import { standaloneAuth, type User, type Session } from '@/lib/auth/standalone-auth'
 
 // Auth context
 interface AuthContextType {
@@ -25,21 +24,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Get initial session
     const getInitialSession = async () => {
       try {
-        console.log('🔵 Auth: Getting initial session...');
-        const { data: { session }, error } = await supabase.auth.getSession();
-        
-        if (error) {
-          console.error('🔴 Auth: Error getting initial session:', error);
-        }
+        console.log('🔵 Standalone Auth: Getting initial session...');
+        const currentSession = standaloneAuth.getSession();
+        const currentUser = standaloneAuth.getUser();
         
         if (isMounted) {
-          console.log('🔵 Auth: Initial session loaded, user:', !!session?.user);
-          setSession(session);
-          setUser(session?.user ?? null);
+          console.log('🔵 Standalone Auth: Initial session loaded, user:', !!currentUser);
+          setSession(currentSession);
+          setUser(currentUser);
           setLoading(false);
         }
       } catch (error) {
-        console.error('🔴 Auth: Exception getting initial session:', error);
+        console.error('🔴 Standalone Auth: Exception getting initial session:', error);
         if (isMounted) {
           setSession(null);
           setUser(null);
@@ -51,31 +47,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     getInitialSession();
 
     // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('🔵 Auth: Auth state change -', event, 'session:', !!session);
+    const unsubscribe = standaloneAuth.onAuthStateChange((authState) => {
+      console.log('🔵 Standalone Auth: Auth state change, authenticated:', authState.isAuthenticated);
       
       if (isMounted) {
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
+        setSession(authState.session);
+        setUser(authState.user);
+        setLoading(authState.loading);
         
         // Log user state changes for debugging
-        if (event === 'SIGNED_OUT') {
-          console.log('🟢 Auth: User signed out successfully, clearing state');
-          console.log('🔵 Auth: Auth state change should trigger navigation to login');
-        } else if (event === 'SIGNED_IN') {
-          console.log('🟢 Auth: User signed in:', session?.user?.email);
-        } else if (event === 'TOKEN_REFRESHED') {
-          console.log('🔵 Auth: Token refreshed for:', session?.user?.email);
+        if (!authState.isAuthenticated && !authState.loading) {
+          console.log('🟢 Standalone Auth: User signed out successfully, clearing state');
+        } else if (authState.isAuthenticated && authState.user) {
+          console.log('🟢 Standalone Auth: User signed in:', authState.user.email);
         }
       }
     });
 
     return () => {
       isMounted = false;
-      subscription.unsubscribe();
+      unsubscribe();
     };
   }, [])
 
@@ -86,7 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Immediately clear local state for instant UI feedback
       setLoading(true);
       
-      const { error } = await supabase.auth.signOut();
+      const { error } = await standaloneAuth.signOut();
       
       if (error) {
         console.error('🔴 useAuth: Sign out error:', error);

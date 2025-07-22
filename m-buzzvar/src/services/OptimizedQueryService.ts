@@ -1,5 +1,5 @@
-import { supabase } from '../lib/supabase';
 import { VibeCheckWithDetails } from '../lib/types';
+import { standaloneDb } from '../../lib/database/standalone-db';
 
 export interface QueryOptions {
   useIndex?: boolean;
@@ -35,38 +35,27 @@ export class OptimizedQueryService {
       cutoffTime.setHours(cutoffTime.getHours() - hoursBack);
 
       // Use optimized query with proper index utilization
-      let query = supabase
-        .from('vibe_checks')
-        .select(`
-          id,
-          venue_id,
-          user_id,
-          busyness_rating,
-          comment,
-          photo_url,
-          user_latitude,
-          user_longitude,
-          created_at,
-          user:users!inner(id, name, avatar_url),
-          venue:venues!inner(id, name, address)
-        `)
-        .eq('venue_id', venueId)
-        .gte('created_at', cutoffTime.toISOString());
+      const limit = options.limit || 50;
+      const offset = options.offset || 0;
+      
+      const vibeChecksResult = await standaloneDb.query<any>(
+        `SELECT 
+          vc.*,
+          u.name as user_name,
+          u.avatar_url as user_avatar_url,
+          v.name as venue_name,
+          v.address as venue_address
+         FROM vibe_checks vc
+         LEFT JOIN users u ON vc.user_id = u.id
+         LEFT JOIN venues v ON vc.venue_id = v.id
+         WHERE vc.venue_id = $1 AND vc.created_at >= $2
+         ORDER BY vc.created_at DESC
+         LIMIT $3 OFFSET $4`,
+        [venueId, cutoffTime.toISOString(), limit, offset]
+      );
 
-      // Apply ordering to utilize index
-      query = query.order('created_at', { ascending: false });
-
-      // Apply limit if specified
-      if (options.limit) {
-        query = query.limit(options.limit);
-      }
-
-      // Apply offset for pagination
-      if (options.offset) {
-        query = query.range(options.offset, options.offset + (options.limit || 50) - 1);
-      }
-
-      const { data: vibeChecks, error } = await query;
+      const vibeChecks = vibeChecksResult.data;
+      const error = null;
 
       if (error) {
         return { data: [], error };
@@ -96,26 +85,24 @@ export class OptimizedQueryService {
       const offset = options.offset || 0;
 
       // Use optimized query with proper index utilization
-      let query = supabase
-        .from('vibe_checks')
-        .select(`
-          id,
-          venue_id,
-          user_id,
-          busyness_rating,
-          comment,
-          photo_url,
-          user_latitude,
-          user_longitude,
-          created_at,
-          user:users!inner(id, name, avatar_url),
-          venue:venues!inner(id, name, address)
-        `)
-        .gte('created_at', cutoffTime.toISOString())
-        .order('created_at', { ascending: false })
-        .range(offset, offset + limit);
+      const vibeChecksResult = await standaloneDb.query<any>(
+        `SELECT 
+          vc.*,
+          u.name as user_name,
+          u.avatar_url as user_avatar_url,
+          v.name as venue_name,
+          v.address as venue_address
+         FROM vibe_checks vc
+         LEFT JOIN users u ON vc.user_id = u.id
+         LEFT JOIN venues v ON vc.venue_id = v.id
+         WHERE vc.created_at >= $1
+         ORDER BY vc.created_at DESC
+         LIMIT $2 OFFSET $3`,
+        [cutoffTime.toISOString(), limit + 1, offset]
+      );
 
-      const { data: vibeChecks, error } = await query;
+      const vibeChecks = vibeChecksResult.data;
+      const error = null;
 
       if (error) {
         return { data: [], error, hasMore: false };
@@ -158,24 +145,23 @@ export class OptimizedQueryService {
       twoHoursAgo.setHours(twoHoursAgo.getHours() - 2);
 
       // Use a single optimized query to get all needed data
-      const { data: vibeChecks, error } = await supabase
-        .from('vibe_checks')
-        .select(`
-          id,
-          venue_id,
-          user_id,
-          busyness_rating,
-          comment,
-          photo_url,
-          user_latitude,
-          user_longitude,
-          created_at,
-          user:users!inner(id, name, avatar_url),
-          venue:venues!inner(id, name, address)
-        `)
-        .eq('venue_id', venueId)
-        .gte('created_at', cutoffTime.toISOString())
-        .order('created_at', { ascending: false });
+      const vibeChecksResult = await standaloneDb.query<any>(
+        `SELECT 
+          vc.*,
+          u.name as user_name,
+          u.avatar_url as user_avatar_url,
+          v.name as venue_name,
+          v.address as venue_address
+         FROM vibe_checks vc
+         LEFT JOIN users u ON vc.user_id = u.id
+         LEFT JOIN venues v ON vc.venue_id = v.id
+         WHERE vc.venue_id = $1 AND vc.created_at >= $2
+         ORDER BY vc.created_at DESC`,
+        [venueId, cutoffTime.toISOString()]
+      );
+
+      const vibeChecks = vibeChecksResult.data;
+      const error = null;
 
       if (error) {
         return { data: null, error };
@@ -184,11 +170,11 @@ export class OptimizedQueryService {
       // Calculate statistics from the fetched data
       const recentCount = vibeChecks.length;
       const averageBusyness = recentCount > 0
-        ? vibeChecks.reduce((sum, vc) => sum + vc.busyness_rating, 0) / recentCount
+        ? vibeChecks.reduce((sum: number, vc: any) => sum + vc.rating, 0) / recentCount
         : null;
 
       const hasLiveActivity = vibeChecks.some(
-        vc => new Date(vc.created_at) > twoHoursAgo
+        (vc: any) => new Date(vc.created_at) > twoHoursAgo
       );
 
       const latestVibeCheck = vibeChecks.length > 0
@@ -232,24 +218,24 @@ export class OptimizedQueryService {
       twoHoursAgo.setHours(twoHoursAgo.getHours() - 2);
 
       // Single query to get all vibe checks for all venues
-      const { data: vibeChecks, error } = await supabase
-        .from('vibe_checks')
-        .select(`
-          id,
-          venue_id,
-          user_id,
-          busyness_rating,
-          comment,
-          photo_url,
-          user_latitude,
-          user_longitude,
-          created_at,
-          user:users!inner(id, name, avatar_url),
-          venue:venues!inner(id, name, address)
-        `)
-        .in('venue_id', venueIds)
-        .gte('created_at', cutoffTime.toISOString())
-        .order('created_at', { ascending: false });
+      const placeholders = venueIds.map((_, index) => `$${index + 2}`).join(',');
+      const vibeChecksResult = await standaloneDb.query<any>(
+        `SELECT 
+          vc.*,
+          u.name as user_name,
+          u.avatar_url as user_avatar_url,
+          v.name as venue_name,
+          v.address as venue_address
+         FROM vibe_checks vc
+         LEFT JOIN users u ON vc.user_id = u.id
+         LEFT JOIN venues v ON vc.venue_id = v.id
+         WHERE vc.venue_id IN (${placeholders}) AND vc.created_at >= $1
+         ORDER BY vc.created_at DESC`,
+        [cutoffTime.toISOString(), ...venueIds]
+      );
+
+      const vibeChecks = vibeChecksResult.data;
+      const error = null;
 
       if (error) {
         return { data: {}, error };
@@ -270,7 +256,7 @@ export class OptimizedQueryService {
 
       // Group vibe checks by venue
       const venueGroups: Record<string, any[]> = {};
-      vibeChecks.forEach(vc => {
+      vibeChecks.forEach((vc: any) => {
         if (!venueGroups[vc.venue_id]) {
           venueGroups[vc.venue_id] = [];
         }
@@ -281,11 +267,11 @@ export class OptimizedQueryService {
       Object.entries(venueGroups).forEach(([venueId, checks]) => {
         const recentCount = checks.length;
         const averageBusyness = recentCount > 0
-          ? checks.reduce((sum, vc) => sum + vc.busyness_rating, 0) / recentCount
+          ? checks.reduce((sum: number, vc: any) => sum + vc.rating, 0) / recentCount
           : null;
 
         const hasLiveActivity = checks.some(
-          vc => new Date(vc.created_at) > twoHoursAgo
+          (vc: any) => new Date(vc.created_at) > twoHoursAgo
         );
 
         const latestVibeCheck = checks.length > 0
@@ -326,14 +312,16 @@ export class OptimizedQueryService {
       oneHourAgo.setHours(oneHourAgo.getHours() - 1);
 
       // Use index on user_id for efficient lookup
-      const { data, error } = await supabase
-        .from('vibe_checks')
-        .select('created_at')
-        .eq('user_id', userId)
-        .eq('venue_id', venueId)
-        .gte('created_at', oneHourAgo.toISOString())
-        .order('created_at', { ascending: false })
-        .limit(1);
+      const result = await standaloneDb.query<any>(
+        `SELECT created_at FROM vibe_checks 
+         WHERE user_id = $1 AND venue_id = $2 AND created_at >= $3
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [userId, venueId, oneHourAgo.toISOString()]
+      );
+
+      const data = result.data;
+      const error = null;
 
       if (error) {
         console.warn('Error checking rate limit:', error);
@@ -394,21 +382,20 @@ export class OptimizedQueryService {
       id: rawData.id,
       venue_id: rawData.venue_id,
       user_id: rawData.user_id,
-      busyness_rating: rawData.busyness_rating,
+      rating: rawData.rating,
       comment: rawData.comment,
       photo_url: rawData.photo_url,
-      user_latitude: rawData.user_latitude,
-      user_longitude: rawData.user_longitude,
       created_at: rawData.created_at,
+      updated_at: rawData.updated_at,
       user: {
-        id: rawData.user.id,
-        name: rawData.user.name || "Anonymous",
-        avatar_url: rawData.user.avatar_url,
+        id: rawData.user_id,
+        name: rawData.user_name || "Anonymous",
+        avatar_url: rawData.user_avatar_url,
       },
       venue: {
-        id: rawData.venue.id,
-        name: rawData.venue.name || "Unknown Venue",
-        address: rawData.venue.address,
+        id: rawData.venue_id,
+        name: rawData.venue_name || "Unknown Venue",
+        address: rawData.venue_address,
       },
       time_ago: timeAgo,
       is_recent: createdAt > twoHoursAgo,

@@ -1,9 +1,55 @@
-import { Database } from './supabase'
+// Base types from standalone database
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  avatar_url?: string;
+  role: 'user' | 'venue_owner' | 'admin' | 'super_admin';
+  university?: string;
+  created_at: string;
+  updated_at: string;
+}
 
-// Base types from database
-export type User = Database['public']['Tables']['users']['Row']
-export type Venue = Database['public']['Tables']['venues']['Row']
-export type VibeCheck = Database['public']['Tables']['vibe_checks']['Row']
+export interface Venue {
+  id: string;
+  name: string;
+  description?: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  owner_id: string;
+  cover_image_url?: string;
+  hours?: string;
+  contact?: string;
+  average_rating?: number;
+  review_count?: number;
+  promotions?: Promotion[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VibeCheck {
+  id: string;
+  user_id: string;
+  venue_id: string;
+  rating: number;
+  comment?: string;
+  photo_url?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Promotion {
+  id: string;
+  venue_id: string;
+  title: string;
+  description?: string;
+  start_date: string;
+  end_date: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
 
 // Core vibe check interface
 export interface VibeCheckWithDetails extends VibeCheck {

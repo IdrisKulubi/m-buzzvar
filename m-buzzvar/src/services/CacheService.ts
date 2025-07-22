@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { VibeCheckWithDetails, VenueWithVibeCheck } from '../lib/types';
+import { VibeCheckWithDetails } from '../lib/types';
 import { PerformanceMonitoringService } from './PerformanceMonitoringService';
 
 export interface CacheEntry<T> {

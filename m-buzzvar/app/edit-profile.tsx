@@ -17,7 +17,7 @@ import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/src/lib/hooks';
-import { getUserProfile, updateUserProfile } from '@/src/actions/auth';
+import { getUserProfile, updateUserProfile } from '@/src/actions/standalone-actions';
 import Button from '@/src/components/Button';
 import Input from '@/src/components/Input';
 

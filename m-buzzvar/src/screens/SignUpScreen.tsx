@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -7,131 +7,165 @@ import {
   Platform,
   Alert,
   StyleSheet,
-} from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
-import { Ionicons } from '@expo/vector-icons'
-import Button from '../components/Button'
-import Input from '../components/Input'
-import { signUp, signInWithGoogle } from '../actions/auth'
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import Button from "../components/Button";
+import Input from "../components/Input";
+import {
+  signInWithGoogle,
+  signUpWithEmail,
+} from "../actions/standalone-actions";
 
 interface SignUpScreenProps {
-  onNavigateToLogin: () => void
+  onNavigateToLogin: () => void;
 }
 
 export default function SignUpScreen({ onNavigateToLogin }: SignUpScreenProps) {
   const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    university: '',
-    password: '',
-    confirmPassword: '',
-  })
-  const [loading, setLoading] = useState(false)
-  const [googleLoading, setGoogleLoading] = useState(false)
-  const [errors, setErrors] = useState<Record<string, string>>({})
+    name: "",
+    email: "",
+    university: "",
+    password: "",
+    confirmPassword: "",
+  });
+  const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const updateFormData = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
+    setFormData((prev) => ({ ...prev, [field]: value }));
     // Clear error when user starts typing
     if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: '' }))
+      setErrors((prev) => ({ ...prev, [field]: "" }));
     }
-  }
+  };
 
   const validateForm = () => {
-    const newErrors: Record<string, string> = {}
+    const newErrors: Record<string, string> = {};
 
     if (!formData.name.trim()) {
-      newErrors.name = 'Name is required'
+      newErrors.name = "Name is required";
     } else if (formData.name.trim().length < 2) {
-      newErrors.name = 'Name must be at least 2 characters'
+      newErrors.name = "Name must be at least 2 characters";
     }
 
     if (!formData.email.trim()) {
-      newErrors.email = 'Email is required'
+      newErrors.email = "Email is required";
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Please enter a valid email'
+      newErrors.email = "Please enter a valid email";
     }
 
     if (!formData.password) {
-      newErrors.password = 'Password is required'
+      newErrors.password = "Password is required";
     } else if (formData.password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters'
+      newErrors.password = "Password must be at least 6 characters";
     } else if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(formData.password)) {
-      newErrors.password = 'Password must contain uppercase, lowercase, and number'
+      newErrors.password =
+        "Password must contain uppercase, lowercase, and number";
     }
 
     if (!formData.confirmPassword) {
-      newErrors.confirmPassword = 'Please confirm your password'
+      newErrors.confirmPassword = "Please confirm your password";
     } else if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match'
+      newErrors.confirmPassword = "Passwords do not match";
     }
 
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
-  }
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleSignUp = async () => {
-    if (!validateForm()) return
+    if (!validateForm()) return;
 
-    setLoading(true)
+    setLoading(true);
     try {
-      const { data, error } = await signUp({
-        email: formData.email.trim(),
-        password: formData.password,
-        name: formData.name.trim(),
-      })
+      const { user, error } = await signUpWithEmail(
+        formData.email.trim(),
+        formData.password,
+        formData.name.trim()
+      );
 
       if (error) {
-        console.error('Sign-up error details:', JSON.stringify(error, null, 2))
-        if ((error as any)?.message?.includes('already registered')) {
+        console.error("Sign-up error details:", JSON.stringify(error, null, 2));
+        if (error.message?.includes("already registered")) {
           Alert.alert(
-            'Account Exists',
-            'An account with this email already exists. Please sign in instead.',
+            "Account Exists",
+            "An account with this email already exists. Please sign in instead.",
             [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Sign In', onPress: onNavigateToLogin },
+              { text: "Cancel", style: "cancel" },
+              { text: "Sign In", onPress: onNavigateToLogin },
             ]
-          )
+          );
         } else {
-          Alert.alert('Sign Up Failed', (error as any)?.message || 'An error occurred during sign up')
+          Alert.alert(
+            "Sign Up Failed",
+            error.message || "An error occurred during sign up"
+          );
         }
-      } else if (data?.user) {
+      } else if (user) {
         Alert.alert(
-          'Account Created!',
-          'Please check your email to verify your account before signing in.',
-          [{ text: 'OK', onPress: onNavigateToLogin }]
-        )
+          "Account Created!",
+          "Your account has been created successfully.",
+          [{ text: "OK", onPress: onNavigateToLogin }]
+        );
       }
     } catch (error) {
-      console.error('Caught an unexpected error during sign-up:', JSON.stringify(error, null, 2))
-      Alert.alert('Sign Up Failed', 'An unexpected error occurred')
+      console.error(
+        "Caught an unexpected error during sign-up:",
+        JSON.stringify(error, null, 2)
+      );
+      Alert.alert("Sign Up Failed", "An unexpected error occurred");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const handleGoogleSignUp = async () => {
-    setGoogleLoading(true)
+    setGoogleLoading(true);
     try {
-      const { data, error } = await signInWithGoogle()
+      const { user, error } = await signInWithGoogle();
 
       if (error) {
-        Alert.alert('Google Sign Up Failed', (error as any)?.message || 'An error occurred during Google sign up')
-      } else if (data?.user) {
-        console.log('Google sign up successful')
+        console.error('🔴 SignUpScreen: Google sign up error:', error.message);
+        
+        // Show user-friendly error messages
+        if (error.message.includes('not available') || error.message.includes('install and configure')) {
+          Alert.alert(
+            'Google Sign-In Unavailable', 
+            'Google Sign-In is not properly configured. Please use email registration instead.',
+            [{ text: 'OK' }]
+          );
+        } else if (error.message.includes('cancelled')) {
+          // Don't show alert for user cancellation
+          console.log('🟡 SignUpScreen: User cancelled Google sign-up');
+        } else if (error.message.includes('Play Services')) {
+          Alert.alert(
+            'Google Play Services Required', 
+            'Please update Google Play Services to use Google Sign-In.',
+            [{ text: 'OK' }]
+          );
+        } else {
+          Alert.alert(
+            "Google Sign Up Failed",
+            error.message || "An error occurred during Google sign up"
+          );
+        }
+      } else if (user) {
+        console.log("🟢 SignUpScreen: Google sign up successful for user:", user.email);
       }
     } catch (error) {
-      Alert.alert('Google Sign Up Failed', 'An unexpected error occurred')
+      console.error('🔴 SignUpScreen: Unexpected Google sign-up error:', error);
+      Alert.alert("Google Sign Up Failed", "An unexpected error occurred");
     } finally {
-      setGoogleLoading(false)
+      setGoogleLoading(false);
     }
-  }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.keyboardView}
       >
         <ScrollView
@@ -156,7 +190,7 @@ export default function SignUpScreen({ onNavigateToLogin }: SignUpScreenProps) {
               label="Full Name"
               placeholder="Enter your full name"
               value={formData.name}
-              onChangeText={(value) => updateFormData('name', value)}
+              onChangeText={(value) => updateFormData("name", value)}
               leftIcon="person"
               autoCapitalize="words"
               autoComplete="name"
@@ -167,7 +201,7 @@ export default function SignUpScreen({ onNavigateToLogin }: SignUpScreenProps) {
               label="Email"
               placeholder="Enter your email"
               value={formData.email}
-              onChangeText={(value) => updateFormData('email', value)}
+              onChangeText={(value) => updateFormData("email", value)}
               leftIcon="mail"
               keyboardType="email-address"
               autoCapitalize="none"
@@ -179,7 +213,7 @@ export default function SignUpScreen({ onNavigateToLogin }: SignUpScreenProps) {
               label="University (Optional)"
               placeholder="Enter your university"
               value={formData.university}
-              onChangeText={(value) => updateFormData('university', value)}
+              onChangeText={(value) => updateFormData("university", value)}
               leftIcon="school"
               autoCapitalize="words"
               error={errors.university}
@@ -189,7 +223,7 @@ export default function SignUpScreen({ onNavigateToLogin }: SignUpScreenProps) {
               label="Password"
               placeholder="Create a password"
               value={formData.password}
-              onChangeText={(value) => updateFormData('password', value)}
+              onChangeText={(value) => updateFormData("password", value)}
               leftIcon="lock-closed"
               secureTextEntry
               autoComplete="password-new"
@@ -200,7 +234,7 @@ export default function SignUpScreen({ onNavigateToLogin }: SignUpScreenProps) {
               label="Confirm Password"
               placeholder="Confirm your password"
               value={formData.confirmPassword}
-              onChangeText={(value) => updateFormData('confirmPassword', value)}
+              onChangeText={(value) => updateFormData("confirmPassword", value)}
               leftIcon="lock-closed"
               secureTextEntry
               autoComplete="password-new"
@@ -234,15 +268,13 @@ export default function SignUpScreen({ onNavigateToLogin }: SignUpScreenProps) {
             disabled={loading}
             fullWidth
             size="large"
-            icon={
-              <Ionicons name="logo-google" size={20} color="#4285F4" />
-            }
+            icon={<Ionicons name="logo-google" size={20} color="#4285F4" />}
           />
 
           {/* Terms and Privacy */}
           <Text style={styles.termsText}>
-            By creating an account, you agree to our{' '}
-            <Text style={styles.linkText}>Terms of Service</Text> and{' '}
+            By creating an account, you agree to our{" "}
+            <Text style={styles.linkText}>Terms of Service</Text> and{" "}
             <Text style={styles.linkText}>Privacy Policy</Text>
           </Text>
 
@@ -259,13 +291,13 @@ export default function SignUpScreen({ onNavigateToLogin }: SignUpScreenProps) {
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: "#f8fafc",
   },
   keyboardView: {
     flex: 1,
@@ -276,16 +308,16 @@ const styles = StyleSheet.create({
     paddingVertical: 32,
   },
   header: {
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 40,
   },
   logoContainer: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#ef4444',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "#ef4444",
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: 24,
   },
   logoText: {
@@ -293,15 +325,15 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 28,
-    fontWeight: 'bold',
-    color: '#1f2937',
+    fontWeight: "bold",
+    color: "#1f2937",
     marginBottom: 8,
-    textAlign: 'center',
+    textAlign: "center",
   },
   subtitle: {
     fontSize: 16,
-    color: '#6b7280',
-    textAlign: 'center',
+    color: "#6b7280",
+    textAlign: "center",
     lineHeight: 24,
   },
   form: {
@@ -311,41 +343,41 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginVertical: 32,
   },
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#e5e7eb',
+    backgroundColor: "#e5e7eb",
   },
   dividerText: {
     marginHorizontal: 16,
     fontSize: 14,
-    color: '#9ca3af',
-    fontWeight: '500',
+    color: "#9ca3af",
+    fontWeight: "500",
   },
   termsText: {
     fontSize: 12,
-    color: '#6b7280',
-    textAlign: 'center',
+    color: "#6b7280",
+    textAlign: "center",
     lineHeight: 18,
     marginTop: 24,
     marginBottom: 16,
   },
   linkText: {
-    color: '#ef4444',
-    fontWeight: '600',
+    color: "#ef4444",
+    fontWeight: "600",
   },
   footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     marginTop: 16,
   },
   footerText: {
     fontSize: 16,
-    color: '#6b7280',
+    color: "#6b7280",
   },
-}) 
+});

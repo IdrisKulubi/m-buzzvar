@@ -1,4 +1,3 @@
-import { supabase } from "@/src/lib/supabase";
 import React, {
   useEffect,
   useMemo,
@@ -19,12 +18,13 @@ import { Ionicons, Feather } from "@expo/vector-icons";
 import { Colors } from "@/constants/Colors";
 import { useAuth } from "@/src/lib/hooks";
 import { useToast } from "@/src/lib/ToastProvider";
-import { toggleBookmark, recordClubView, getVenues } from "@/src/actions/clubs";
+import { useVenues } from "@/src/hooks/useDatabase";
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import VenueDetailsSheet from "./VenueDetailsSheet";
 import StarRating from "./StarRating";
 import LiveIndicator from "./LiveIndicator";
 import SwipeFeedSkeleton from "./skeletons/SwipeFeedSkeleton";
+import { Venue } from "@/src/lib/types";
 
 const SwipeFeed: React.FC = () => {
   const colorScheme = useColorScheme() ?? "dark";
@@ -32,9 +32,8 @@ const SwipeFeed: React.FC = () => {
   const { user } = useAuth();
   const { showToast } = useToast();
 
-  const [venues, setVenues] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedVenue, setSelectedVenue] = useState<any | null>(null);
+  const { venues, loading, error, refetch } = useVenues();
+  const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   // Bottom sheet ref and snap points
@@ -43,78 +42,20 @@ const SwipeFeed: React.FC = () => {
 
   const styles = useMemo(() => getStyles(colors), [colors]);
 
-  const loadVenues = useCallback(async () => {
-    let bookmarkedIds = new Set();
-
-    if (user) {
-      const { data: bookmarksData } = await supabase
-        .from("user_bookmarks")
-        .select("venue_id")
-        .eq("user_id", user.id);
-      if (bookmarksData) {
-        bookmarkedIds = new Set(bookmarksData.map((b) => b.venue_id));
-      }
-    }
-
-    // Use the updated getVenues function that includes vibe check data
-    const { data: venuesData, error } = await getVenues();
-
-    if (error) {
-      console.error("Error fetching venues:", error);
-      showToast({ type: "error", message: "Couldn't fetch venues" });
-    } else {
-      // Fetch additional data (menus, promotions) for each venue
-      const venuesWithExtras = await Promise.all(
-        venuesData.slice(0, 20).map(async (venue) => {
-          const [menusResult, promotionsResult] = await Promise.all([
-            supabase.from("menus").select("*").eq("venue_id", venue.id),
-            supabase
-              .from("promotions")
-              .select("*")
-              .eq("venue_id", venue.id)
-              .eq("is_active", true),
-          ]);
-
-          return {
-            ...venue,
-            menus: menusResult.data || [],
-            promotions: promotionsResult.data || [],
-            isBookmarked: bookmarkedIds.has(venue.id),
-            isLiked: false, // Placeholder for like state
-          };
-        })
-      );
-
-      setVenues(venuesWithExtras);
-
-      // If a venue is open in the sheet, update its data as well
-      if (selectedVenue) {
-        const updatedSelected = venuesWithExtras.find(
-          (v) => v.id === selectedVenue.id
-        );
-        if (updatedSelected) {
-          setSelectedVenue(updatedSelected);
-        }
-      }
-    }
-  }, [user, showToast, selectedVenue]);
-
+  // Show error toast if venues failed to load
   useEffect(() => {
-    const initialLoad = async () => {
-      setLoading(true);
-      await loadVenues();
-      setLoading(false);
-    };
-    initialLoad();
-  }, [loadVenues, user]);
+    if (error) {
+      showToast({ type: "error", message: "Couldn't fetch venues" });
+    }
+  }, [error, showToast]);
 
-  const handlePresentDetails = useCallback((venue: any) => {
+  const handlePresentDetails = useCallback((venue: Venue) => {
     setSelectedVenue(venue);
     bottomSheetModalRef.current?.present();
   }, []);
 
   const handleInteraction = useCallback(
-    (venueId: string, action: "like" | "save") => {
+    (action: "like" | "save") => {
       if (!user) {
         showToast({
           type: "error",
@@ -123,52 +64,21 @@ const SwipeFeed: React.FC = () => {
         return;
       }
 
-      const originalVenues = [...venues];
-      let optimisticState, endpointCall, successMessage;
-
-      if (action === "save") {
-        const venue = venues.find((v) => v.id === venueId);
-        const isCurrentlyBookmarked = venue?.isBookmarked;
-
-        optimisticState = { isBookmarked: !isCurrentlyBookmarked };
-        endpointCall = () => toggleBookmark(venueId, user.id);
-        successMessage = isCurrentlyBookmarked
-          ? "Removed from your faves"
-          : "Saved to your faves ✨";
-      } else {
-        // like
-        optimisticState = { isLiked: true };
-        endpointCall = () => recordClubView(venueId, user.id, "like");
-        successMessage = "You liked this spot! 🔥";
-      }
-
-      // Optimistic UI update
-      setVenues((current) =>
-        current.map((v) =>
-          v.id === venueId ? { ...v, ...optimisticState } : v
-        )
-      );
-
-      endpointCall().then(({ error }) => {
-        if (error) {
-          setVenues(originalVenues); // Revert on error
-          showToast({
-            type: "error",
-            message: "Couldn't save that. Try again.",
-          });
-        } else {
-          showToast({ type: "success", message: successMessage });
-        }
-      });
+      // For now, just show success message since we don't have bookmark/like functionality in standalone system
+      const successMessage = action === "save" 
+        ? "Saved to your faves ✨" 
+        : "You liked this spot! 🔥";
+      
+      showToast({ type: "success", message: successMessage });
     },
-    [user, venues, showToast]
+    [user, showToast]
   );
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadVenues();
+    await refetch();
     setRefreshing(false);
-  }, [loadVenues]);
+  }, [refetch]);
 
   const formatHours = (hours: string | null) => {
     if (!hours) return "Hours not available";
@@ -184,7 +94,7 @@ const SwipeFeed: React.FC = () => {
       if (todayHours) return `Open: ${todayHours}`;
 
       return "Hours not specified";
-    } catch (e) {
+    } catch {
       return hours;
     }
   };
@@ -244,37 +154,27 @@ const SwipeFeed: React.FC = () => {
       <View style={styles.cardActions}>
         <TouchableOpacity
           style={styles.actionButton}
-          onPress={() => handleInteraction(item.id, "like")}
+          onPress={() => handleInteraction("like")}
         >
           <Ionicons
-            name={item.isLiked ? "heart" : "heart-outline"}
+            name="heart-outline"
             size={22}
-            color={item.isLiked ? colors.destructive : colors.text}
+            color={colors.text}
           />
-          <Text
-            style={[
-              styles.actionText,
-              item.isLiked && { color: colors.destructive },
-            ]}
-          >
+          <Text style={styles.actionText}>
             Like
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.actionButton}
-          onPress={() => handleInteraction(item.id, "save")}
+          onPress={() => handleInteraction("save")}
         >
           <Ionicons
-            name={item.isBookmarked ? "bookmark" : "bookmark-outline"}
+            name="bookmark-outline"
             size={22}
-            color={item.isBookmarked ? colors.tint : colors.text}
+            color={colors.text}
           />
-          <Text
-            style={[
-              styles.actionText,
-              item.isBookmarked && { color: colors.tint },
-            ]}
-          >
+          <Text style={styles.actionText}>
             Save
           </Text>
         </TouchableOpacity>
@@ -319,7 +219,7 @@ const SwipeFeed: React.FC = () => {
         {selectedVenue && (
           <VenueDetailsSheet
             venue={selectedVenue}
-            onDataNeedsRefresh={loadVenues}
+            onDataNeedsRefresh={refetch}
           />
         )}
       </BottomSheetModal>

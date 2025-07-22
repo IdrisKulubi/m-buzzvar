@@ -239,7 +239,7 @@ export default function VibesSection({ onRefresh }: VibesSectionProps) {
         <View style={styles.emptyContainer}>
           <Ionicons name="pulse-outline" size={32} color={colors.muted} />
           <Text style={styles.emptyText}>
-            No recent vibes yet. Be the first to share what's happening!
+            No recent vibes yet. Be the first to share what&apos;s happening!
           </Text>
         </View>
       </View>
