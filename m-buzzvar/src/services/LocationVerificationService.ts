@@ -1,7 +1,6 @@
 import * as Location from 'expo-location';
 import { LocationVerification, Venue } from '../lib/types';
 import { ErrorFactory, AppError, RetryManager } from '../lib/errors';
-import { ConnectivityManager } from '../lib/connectivity';
 
 export class LocationVerificationService {
   static readonly MAX_DISTANCE_METERS = 100;
