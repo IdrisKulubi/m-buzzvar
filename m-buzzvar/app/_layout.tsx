@@ -45,8 +45,17 @@ function RootLayoutNav() {
   }, [loading, router])
 
   useEffect(() => {
+    console.log('🔵 Layout: Navigation effect triggered', {
+      loading,
+      hasUser: !!user,
+      userEmail: user?.email,
+      segments: segments,
+      currentRoute: segments.join("/")
+    });
+
     // Wait until authentication status is confirmed
     if (loading) {
+      console.log('🔵 Layout: Still loading auth, waiting...');
       return;
     }
 
@@ -62,17 +71,30 @@ function RootLayoutNav() {
       currentRoute.includes("login") || currentRoute.includes("setup-profile");
     const inInitialRoute = currentRoute === "" || currentRoute === "index";
 
+    console.log('🔵 Layout: Route analysis', {
+      currentRoute,
+      inAuthGroup,
+      inProtectedRoute,
+      inPublicRoute,
+      inInitialRoute,
+      hasUser: !!user
+    });
+
     if (!user && inProtectedRoute) {
       // Redirect them to the login screen.
+      console.log('🔴 Layout: No user on protected route, redirecting to login');
       router.replace("/login");
     } else if (user && (inPublicRoute || inInitialRoute)) {
       // User is signed in but is on a public route or initial route.
       // This occurs after login or on app launch with a valid session.
       // We check for a profile and redirect accordingly.
+      console.log('🔵 Layout: User found on public/initial route, checking profile...');
       checkUserProfile(user.id).then(({ hasProfile, error }) => {
+        console.log('🔵 Layout: Profile check result', { hasProfile, error: !!error });
+        
         if (error) {
           console.error(
-            "Auth flow error: Could not check profile. Redirecting to login.",
+            "🔴 Layout: Auth flow error: Could not check profile. Redirecting to login.",
             error
           );
           router.replace("/login");
@@ -80,11 +102,18 @@ function RootLayoutNav() {
         }
 
         if (hasProfile) {
+          console.log('🟢 Layout: User has profile, redirecting to tabs');
           router.replace("/(tabs)");
         } else {
+          console.log('🟡 Layout: User needs profile setup, redirecting to setup');
           router.replace("/setup-profile");
         }
       });
+    } else if (!user && (inPublicRoute || inInitialRoute)) {
+      console.log('🔵 Layout: No user on public/initial route, redirecting to login');
+      router.replace("/login");
+    } else {
+      console.log('🔵 Layout: User authenticated and on correct route, staying put');
     }
     // If user is authenticated and on a protected route, let them stay there
   }, [user, loading, segments, router]);

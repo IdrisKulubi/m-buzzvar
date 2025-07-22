@@ -278,10 +278,10 @@ export class PhotoUploadServiceR2 {
    * @returns Promise with batch upload results
    */
   static async uploadPhotoBatch(
-    photos: Array<{ uri: string; type: string; name: string }>,
+    photos: { uri: string; type: string; name: string }[],
     userId: string,
     options: PhotoUploadOptions = {}
-  ): Promise<Array<PhotoUploadResult>> {
+  ): Promise<PhotoUploadResult[]> {
     const results: PhotoUploadResult[] = [];
     
     for (let i = 0; i < photos.length; i++) {

@@ -40,7 +40,6 @@ export default function Input({
   const [isSecure, setIsSecure] = useState(secureTextEntry)
   const [isFocused, setIsFocused] = useState(false)
   const colorScheme = useColorScheme() ?? 'dark' // Default to dark for premium look
-  const colors = Colors[colorScheme]
 
   const getContainerStyle = (): ViewStyle => ({
     marginBottom: 20, // Increased spacing for premium look

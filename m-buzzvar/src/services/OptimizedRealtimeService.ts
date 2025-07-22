@@ -1,58 +1,66 @@
-import { RealtimeChannel } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
-import { VibeCheckWithDetails } from '../lib/types';
-import { OptimizedQueryService } from './OptimizedQueryService';
-import { VibeCheckCacheService } from './CacheService';
+import { VibeCheckWithDetails } from "../lib/types";
+import { mobileDb } from "../lib/database/mobile-database-service";
+import { standaloneAuth } from "../../lib/auth/standalone-auth";
 
 export interface SubscriptionConfig {
   venueId?: string;
   batchUpdates?: boolean;
   batchDelay?: number;
   maxRetries?: number;
+  pollInterval?: number;
   onVibeCheckInsert?: (vibeCheck: VibeCheckWithDetails) => void;
   onVibeCheckUpdate?: (vibeCheck: VibeCheckWithDetails) => void;
   onVibeCheckDelete?: (vibeCheckId: string) => void;
-  onError?: (error: any) => void;
-  onConnectionChange?: (status: 'connected' | 'disconnected' | 'reconnecting') => void;
+  onError?: (error: Error) => void;
+  onConnectionChange?: (
+    status: "connected" | "disconnected" | "reconnecting"
+  ) => void;
 }
 
 interface PendingUpdate {
-  type: 'insert' | 'update' | 'delete';
-  data: any;
+  type: "insert" | "update" | "delete";
+  data: VibeCheckWithDetails | string;
   timestamp: number;
 }
 
+interface PollingSubscription {
+  config: SubscriptionConfig;
+  retryCount: number;
+  lastActivity: number;
+  lastPollTimestamp: string;
+  pollTimer?: ReturnType<typeof setInterval>;
+}
+
 /**
- * Optimized real-time service with connection pooling, batching, and error recovery
+ * Optimized real-time service with polling-based updates, batching, and error recovery
+ * Uses standalone database instead of Supabase real-time subscriptions
  */
 export class OptimizedRealtimeService {
-  private static subscriptions = new Map<string, {
-    channel: RealtimeChannel;
-    config: SubscriptionConfig;
-    retryCount: number;
-    lastActivity: number;
-  }>();
-  
+  private static subscriptions = new Map<string, PollingSubscription>();
   private static pendingUpdates = new Map<string, PendingUpdate[]>();
-  private static batchTimers = new Map<string, NodeJS.Timeout>();
-  private static connectionStatus: 'connected' | 'disconnected' | 'reconnecting' = 'disconnected';
-  private static heartbeatInterval: NodeJS.Timeout | null = null;
-  
+  private static batchTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private static connectionStatus:
+    | "connected"
+    | "disconnected"
+    | "reconnecting" = "disconnected";
+  private static healthCheckInterval: ReturnType<typeof setInterval> | null =
+    null;
+
   private static readonly DEFAULT_BATCH_DELAY = 500; // 500ms
+  private static readonly DEFAULT_POLL_INTERVAL = 5000; // 5 seconds
   private static readonly MAX_RETRIES = 3;
-  private static readonly HEARTBEAT_INTERVAL = 30000; // 30 seconds
-  private static readonly SUBSCRIPTION_TIMEOUT = 10000; // 10 seconds
+  private static readonly HEALTH_CHECK_INTERVAL = 30000; // 30 seconds
 
   /**
    * Initialize the optimized real-time service
    */
   static initialize(): void {
-    this.startHeartbeat();
-    this.setupGlobalErrorHandling();
+    this.startHealthCheck();
+    this.connectionStatus = "connected";
   }
 
   /**
-   * Create an optimized subscription with connection pooling
+   * Create an optimized subscription with polling-based updates
    */
   static async subscribe(
     subscriptionId: string,
@@ -62,80 +70,45 @@ export class OptimizedRealtimeService {
       // Remove existing subscription if it exists
       await this.unsubscribe(subscriptionId);
 
-      // Create optimized channel name
-      const channelName = this.generateChannelName(config.venueId);
-      
-      // Check if we can reuse an existing channel
-      const existingSubscription = this.findReusableChannel(channelName, config);
-      if (existingSubscription) {
-        return this.reuseChannel(subscriptionId, existingSubscription, config);
+      // Verify user is authenticated
+      const currentUser = standaloneAuth.getUser();
+      if (!currentUser) {
+        throw new Error("User must be authenticated to subscribe to updates");
       }
 
-      // Create new channel with optimized configuration
-      const channel = supabase.channel(channelName, {
-        config: {
-          presence: { key: subscriptionId },
-          broadcast: { self: false },
-        },
-      });
-
-      // Configure subscription with proper filtering
-      const subscription = channel.on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'vibe_checks',
-          ...(config.venueId && { filter: `venue_id=eq.${config.venueId}` }),
-        },
-        (payload) => this.handleRealtimeEvent(subscriptionId, payload, config)
-      );
-
-      // Subscribe with timeout and retry logic
-      const subscribePromise = new Promise<boolean>((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          reject(new Error('Subscription timeout'));
-        }, this.SUBSCRIPTION_TIMEOUT);
-
-        channel.subscribe((status) => {
-          clearTimeout(timeout);
-          
-          if (status === 'SUBSCRIBED') {
-            this.connectionStatus = 'connected';
-            config.onConnectionChange?.('connected');
-            resolve(true);
-          } else if (status === 'CHANNEL_ERROR') {
-            this.connectionStatus = 'disconnected';
-            config.onConnectionChange?.('disconnected');
-            reject(new Error('Channel subscription failed'));
-          }
-        });
-      });
-
-      await subscribePromise;
-
-      // Store subscription with metadata
-      this.subscriptions.set(subscriptionId, {
-        channel,
+      // Create polling subscription
+      const subscription: PollingSubscription = {
         config,
         retryCount: 0,
         lastActivity: Date.now(),
-      });
+        lastPollTimestamp: new Date().toISOString(),
+      };
 
-      console.log(`Optimized subscription created: ${subscriptionId}`);
+      // Start polling
+      this.startPolling(subscriptionId, subscription);
+
+      // Store subscription
+      this.subscriptions.set(subscriptionId, subscription);
+
+      // Notify connection established
+      this.connectionStatus = "connected";
+      config.onConnectionChange?.("connected");
+
+      console.log(`Optimized polling subscription created: ${subscriptionId}`);
       return { success: true };
-
     } catch (error) {
-      console.error('Error creating optimized subscription:', error);
-      
+      console.error("Error creating optimized subscription:", error);
+
       // Attempt retry if configured
       const maxRetries = config.maxRetries || this.MAX_RETRIES;
       const subscription = this.subscriptions.get(subscriptionId);
-      
+
       if (subscription && subscription.retryCount < maxRetries) {
         subscription.retryCount++;
-        console.log(`Retrying subscription ${subscriptionId} (${subscription.retryCount}/${maxRetries})`);
-        
+        console.log(
+          `Retrying subscription ${subscriptionId} (${subscription.retryCount}/${maxRetries})`
+        );
+
         // Exponential backoff
         const delay = Math.pow(2, subscription.retryCount) * 1000;
         setTimeout(() => {
@@ -145,7 +118,10 @@ export class OptimizedRealtimeService {
 
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to create subscription',
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to create subscription",
       };
     }
   }
@@ -153,7 +129,9 @@ export class OptimizedRealtimeService {
   /**
    * Unsubscribe with proper cleanup
    */
-  static async unsubscribe(subscriptionId: string): Promise<{ success: boolean; error?: string }> {
+  static async unsubscribe(
+    subscriptionId: string
+  ): Promise<{ success: boolean; error?: string }> {
     try {
       const subscription = this.subscriptions.get(subscriptionId);
       if (!subscription) {
@@ -163,18 +141,21 @@ export class OptimizedRealtimeService {
       // Clear any pending batch updates
       this.clearPendingUpdates(subscriptionId);
 
-      // Remove channel
-      await supabase.removeChannel(subscription.channel);
+      // Stop polling timer
+      if (subscription.pollTimer) {
+        clearInterval(subscription.pollTimer);
+      }
+
+      // Remove subscription
       this.subscriptions.delete(subscriptionId);
 
       console.log(`Unsubscribed: ${subscriptionId}`);
       return { success: true };
-
     } catch (error) {
-      console.error('Error unsubscribing:', error);
+      console.error("Error unsubscribing:", error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to unsubscribe',
+        error: error instanceof Error ? error.message : "Failed to unsubscribe",
       };
     }
   }
@@ -185,7 +166,7 @@ export class OptimizedRealtimeService {
   static async unsubscribeAll(): Promise<{ success: boolean; error?: string }> {
     try {
       const subscriptionIds = Array.from(this.subscriptions.keys());
-      
+
       // Clear all batch timers
       for (const timer of this.batchTimers.values()) {
         clearTimeout(timer);
@@ -193,7 +174,7 @@ export class OptimizedRealtimeService {
       this.batchTimers.clear();
       this.pendingUpdates.clear();
 
-      // Unsubscribe from all channels
+      // Unsubscribe from all subscriptions
       for (const subscriptionId of subscriptionIds) {
         const result = await this.unsubscribe(subscriptionId);
         if (!result.success) {
@@ -201,20 +182,22 @@ export class OptimizedRealtimeService {
         }
       }
 
-      // Stop heartbeat
-      if (this.heartbeatInterval) {
-        clearInterval(this.heartbeatInterval);
-        this.heartbeatInterval = null;
+      // Stop health check
+      if (this.healthCheckInterval) {
+        clearInterval(this.healthCheckInterval);
+        this.healthCheckInterval = null;
       }
 
-      console.log('All optimized subscriptions cleaned up');
+      console.log("All optimized subscriptions cleaned up");
       return { success: true };
-
     } catch (error) {
-      console.error('Error cleaning up all subscriptions:', error);
+      console.error("Error cleaning up all subscriptions:", error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to cleanup subscriptions',
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to cleanup subscriptions",
       };
     }
   }
@@ -226,12 +209,13 @@ export class OptimizedRealtimeService {
     activeSubscriptions: number;
     connectionStatus: string;
     pendingUpdates: number;
-    subscriptionDetails: Array<{
+    subscriptionDetails: {
       id: string;
       venueId?: string;
       retryCount: number;
       lastActivity: number;
-    }>;
+      pollInterval: number;
+    }[];
   } {
     const subscriptionDetails = Array.from(this.subscriptions.entries()).map(
       ([id, sub]) => ({
@@ -239,11 +223,14 @@ export class OptimizedRealtimeService {
         venueId: sub.config.venueId,
         retryCount: sub.retryCount,
         lastActivity: sub.lastActivity,
+        pollInterval: sub.config.pollInterval || this.DEFAULT_POLL_INTERVAL,
       })
     );
 
-    const totalPendingUpdates = Array.from(this.pendingUpdates.values())
-      .reduce((sum, updates) => sum + updates.length, 0);
+    const totalPendingUpdates = Array.from(this.pendingUpdates.values()).reduce(
+      (sum, updates) => sum + updates.length,
+      0
+    );
 
     return {
       activeSubscriptions: this.subscriptions.size,
@@ -254,83 +241,119 @@ export class OptimizedRealtimeService {
   }
 
   /**
-   * Handle real-time events with batching and optimization
+   * Start polling for a subscription
    */
-  private static async handleRealtimeEvent(
+  private static startPolling(
     subscriptionId: string,
-    payload: any,
-    config: SubscriptionConfig
+    subscription: PollingSubscription
+  ): void {
+    const pollInterval =
+      subscription.config.pollInterval || this.DEFAULT_POLL_INTERVAL;
+
+    subscription.pollTimer = setInterval(async () => {
+      try {
+        await this.pollForUpdates(subscriptionId, subscription);
+      } catch (error) {
+        console.error(
+          `Polling error for subscription ${subscriptionId}:`,
+          error
+        );
+        subscription.config.onError?.(error as Error);
+      }
+    }, pollInterval);
+  }
+
+  /**
+   * Poll for updates from the database
+   */
+  private static async pollForUpdates(
+    subscriptionId: string,
+    subscription: PollingSubscription
   ): Promise<void> {
     try {
-      const subscription = this.subscriptions.get(subscriptionId);
-      if (subscription) {
-        subscription.lastActivity = Date.now();
+      subscription.lastActivity = Date.now();
+
+      // Query for new vibe checks since last poll
+      const sql = `
+        SELECT vc.*, 
+               u.name as user_name, 
+               u.avatar_url as user_avatar,
+               v.name as venue_name,
+               v.address as venue_address
+        FROM vibe_checks vc
+        JOIN users u ON vc.user_id = u.id
+        JOIN venues v ON vc.venue_id = v.id
+        WHERE vc.created_at > $1
+        ${subscription.config.venueId ? "AND vc.venue_id = $2" : ""}
+        ORDER BY vc.created_at ASC
+      `;
+
+      const params = [subscription.lastPollTimestamp];
+      if (subscription.config.venueId) {
+        params.push(subscription.config.venueId);
       }
 
-      const { eventType, new: newRecord, old: oldRecord } = payload;
+      const result = await mobileDb.query(sql, params);
 
-      // Invalidate relevant cache entries
-      if (newRecord?.venue_id) {
-        await VibeCheckCacheService.invalidateOnVibeCheckCreate(newRecord.venue_id);
+      if (result.data && result.data.length > 0) {
+        // Update last poll timestamp to the latest record
+        const latestRecord = result.data[result.data.length - 1];
+        subscription.lastPollTimestamp = latestRecord.created_at;
+
+        // Process each new vibe check
+        for (const record of result.data) {
+          const vibeCheckWithDetails =
+            this.transformToVibeCheckWithDetails(record);
+
+          // Handle batching if enabled
+          if (subscription.config.batchUpdates) {
+            this.addToPendingUpdates(subscriptionId, {
+              type: "insert",
+              data: vibeCheckWithDetails,
+              timestamp: Date.now(),
+            });
+            this.scheduleBatchProcessing(subscriptionId, subscription.config);
+          } else {
+            // Process immediately
+            subscription.config.onVibeCheckInsert?.(vibeCheckWithDetails);
+          }
+        }
       }
-
-      // Handle batching if enabled
-      if (config.batchUpdates) {
-        this.addToPendingUpdates(subscriptionId, {
-          type: eventType.toLowerCase(),
-          data: { newRecord, oldRecord },
-          timestamp: Date.now(),
-        });
-
-        this.scheduleBatchProcessing(subscriptionId, config);
-        return;
-      }
-
-      // Process immediately if batching is disabled
-      await this.processRealtimeEvent(eventType, newRecord, oldRecord, config);
-
     } catch (error) {
-      console.error('Error handling realtime event:', error);
-      config.onError?.(error);
+      console.error("Error polling for updates:", error);
+      subscription.config.onError?.(error as Error);
     }
   }
 
   /**
-   * Process individual real-time event
+   * Process individual update event
    */
-  private static async processRealtimeEvent(
+  private static async processUpdateEvent(
     eventType: string,
-    newRecord: any,
-    oldRecord: any,
+    data: VibeCheckWithDetails | string,
     config: SubscriptionConfig
   ): Promise<void> {
     switch (eventType) {
-      case 'INSERT':
-        if (newRecord && config.onVibeCheckInsert) {
-          const vibeCheckWithDetails = await this.fetchVibeCheckWithDetailsOptimized(newRecord.id);
-          if (vibeCheckWithDetails) {
-            config.onVibeCheckInsert(vibeCheckWithDetails);
-          }
+      case "insert":
+        if (data && typeof data === "object" && config.onVibeCheckInsert) {
+          config.onVibeCheckInsert(data);
         }
         break;
 
-      case 'UPDATE':
-        if (newRecord && config.onVibeCheckUpdate) {
-          const vibeCheckWithDetails = await this.fetchVibeCheckWithDetailsOptimized(newRecord.id);
-          if (vibeCheckWithDetails) {
-            config.onVibeCheckUpdate(vibeCheckWithDetails);
-          }
+      case "update":
+        if (data && typeof data === "object" && config.onVibeCheckUpdate) {
+          config.onVibeCheckUpdate(data);
         }
         break;
 
-      case 'DELETE':
-        if (oldRecord && config.onVibeCheckDelete) {
-          config.onVibeCheckDelete(oldRecord.id);
+      case "delete":
+        if (data && typeof data === "string" && config.onVibeCheckDelete) {
+          config.onVibeCheckDelete(data);
         }
         break;
 
       default:
-        console.warn('Unknown realtime event type:', eventType);
+        console.warn("Unknown update event type:", eventType);
     }
   }
 
@@ -341,83 +364,39 @@ export class OptimizedRealtimeService {
     vibeCheckId: string
   ): Promise<VibeCheckWithDetails | null> {
     try {
-      const { data: vibeCheck, error } = await supabase
-        .from('vibe_checks')
-        .select(`
-          id,
-          venue_id,
-          user_id,
-          busyness_rating,
-          comment,
-          photo_url,
-          user_latitude,
-          user_longitude,
-          created_at,
-          user:users!inner(id, name, avatar_url),
-          venue:venues!inner(id, name, address)
-        `)
-        .eq('id', vibeCheckId)
-        .single();
+      const sql = `
+        SELECT vc.*, 
+               u.name as user_name, 
+               u.avatar_url as user_avatar,
+               v.name as venue_name,
+               v.address as venue_address
+        FROM vibe_checks vc
+        JOIN users u ON vc.user_id = u.id
+        JOIN venues v ON vc.venue_id = v.id
+        WHERE vc.id = $1
+      `;
 
-      if (error || !vibeCheck) {
-        console.error('Error fetching vibe check details:', error);
+      const result = await mobileDb.query(sql, [vibeCheckId]);
+
+      if (!result.data || result.data.length === 0) {
+        console.error("Vibe check not found:", vibeCheckId);
         return null;
       }
 
-      return this.transformToVibeCheckWithDetails(vibeCheck);
+      return this.transformToVibeCheckWithDetails(result.data[0]);
     } catch (error) {
-      console.error('Error fetching vibe check details:', error);
+      console.error("Error fetching vibe check details:", error);
       return null;
     }
   }
 
   /**
-   * Generate optimized channel name
-   */
-  private static generateChannelName(venueId?: string): string {
-    return venueId ? `vibe-checks-venue-${venueId}` : 'vibe-checks-global';
-  }
-
-  /**
-   * Find reusable channel for connection pooling
-   */
-  private static findReusableChannel(
-    channelName: string,
-    config: SubscriptionConfig
-  ): { subscriptionId: string; subscription: any } | null {
-    for (const [id, subscription] of this.subscriptions.entries()) {
-      if (subscription.channel.topic === channelName &&
-          subscription.config.venueId === config.venueId) {
-        return { subscriptionId: id, subscription };
-      }
-    }
-    return null;
-  }
-
-  /**
-   * Reuse existing channel for connection pooling
-   */
-  private static reuseChannel(
-    subscriptionId: string,
-    existingSubscription: { subscriptionId: string; subscription: any },
-    config: SubscriptionConfig
-  ): { success: boolean; error?: string } {
-    // Clone the existing subscription with new config
-    this.subscriptions.set(subscriptionId, {
-      channel: existingSubscription.subscription.channel,
-      config,
-      retryCount: 0,
-      lastActivity: Date.now(),
-    });
-
-    console.log(`Reused channel for subscription: ${subscriptionId}`);
-    return { success: true };
-  }
-
-  /**
    * Add event to pending updates for batching
    */
-  private static addToPendingUpdates(subscriptionId: string, update: PendingUpdate): void {
+  private static addToPendingUpdates(
+    subscriptionId: string,
+    update: PendingUpdate
+  ): void {
     if (!this.pendingUpdates.has(subscriptionId)) {
       this.pendingUpdates.set(subscriptionId, []);
     }
@@ -427,7 +406,10 @@ export class OptimizedRealtimeService {
   /**
    * Schedule batch processing
    */
-  private static scheduleBatchProcessing(subscriptionId: string, config: SubscriptionConfig): void {
+  private static scheduleBatchProcessing(
+    subscriptionId: string,
+    config: SubscriptionConfig
+  ): void {
     // Clear existing timer
     const existingTimer = this.batchTimers.get(subscriptionId);
     if (existingTimer) {
@@ -444,9 +426,24 @@ export class OptimizedRealtimeService {
   }
 
   /**
+   * Clear pending updates for a subscription
+   */
+  private static clearPendingUpdates(subscriptionId: string): void {
+    const timer = this.batchTimers.get(subscriptionId);
+    if (timer) {
+      clearTimeout(timer);
+      this.batchTimers.delete(subscriptionId);
+    }
+    this.pendingUpdates.delete(subscriptionId);
+  }
+
+  /**
    * Process batched updates
    */
-  private static async processBatchUpdates(subscriptionId: string, config: SubscriptionConfig): Promise<void> {
+  private static async processBatchUpdates(
+    subscriptionId: string,
+    config: SubscriptionConfig
+  ): Promise<void> {
     const updates = this.pendingUpdates.get(subscriptionId);
     if (!updates || updates.length === 0) {
       return;
@@ -465,115 +462,126 @@ export class OptimizedRealtimeService {
       // Process each type of update
       for (const [type, typeUpdates] of Object.entries(groupedUpdates)) {
         for (const update of typeUpdates) {
-          await this.processRealtimeEvent(
-            type.toUpperCase(),
-            update.data.newRecord,
-            update.data.oldRecord,
-            config
-          );
+          await this.processUpdateEvent(type, update.data, config);
         }
       }
 
       // Clear processed updates
       this.pendingUpdates.delete(subscriptionId);
       this.batchTimers.delete(subscriptionId);
-
     } catch (error) {
-      console.error('Error processing batch updates:', error);
-      config.onError?.(error);
+      console.error("Error processing batch updates:", error);
+      config.onError?.(error as Error);
     }
   }
 
   /**
-   * Clear pending updates for a subscription
+   * Start health check to monitor connection and database health
    */
-  private static clearPendingUpdates(subscriptionId: string): void {
-    const timer = this.batchTimers.get(subscriptionId);
-    if (timer) {
-      clearTimeout(timer);
-      this.batchTimers.delete(subscriptionId);
-    }
-    this.pendingUpdates.delete(subscriptionId);
-  }
-
-  /**
-   * Start heartbeat to monitor connection health
-   */
-  private static startHeartbeat(): void {
-    if (this.heartbeatInterval) {
-      clearInterval(this.heartbeatInterval);
+  private static startHealthCheck(): void {
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
     }
 
-    this.heartbeatInterval = setInterval(() => {
-      this.checkConnectionHealth();
-    }, this.HEARTBEAT_INTERVAL);
+    this.healthCheckInterval = setInterval(async () => {
+      await this.checkConnectionHealth();
+    }, this.HEALTH_CHECK_INTERVAL);
   }
 
   /**
    * Check connection health and reconnect if needed
    */
-  private static checkConnectionHealth(): void {
-    const now = Date.now();
-    const staleThreshold = this.HEARTBEAT_INTERVAL * 2;
+  private static async checkConnectionHealth(): Promise<void> {
+    try {
+      // Check database health
+      const health = await mobileDb.checkHealth();
 
-    for (const [subscriptionId, subscription] of this.subscriptions.entries()) {
-      if (now - subscription.lastActivity > staleThreshold) {
-        console.warn(`Stale subscription detected: ${subscriptionId}`);
-        this.reconnectSubscription(subscriptionId);
+      if (health.status !== "healthy") {
+        console.warn("Database health check failed:", health.error);
+        this.connectionStatus = "disconnected";
+
+        // Notify all subscriptions of connection issues
+        for (const [, subscription] of this.subscriptions.entries()) {
+          subscription.config.onConnectionChange?.("disconnected");
+        }
+        return;
       }
+
+      // Check for stale subscriptions
+      const now = Date.now();
+      const staleThreshold = this.HEALTH_CHECK_INTERVAL * 2;
+
+      for (const [
+        subscriptionId,
+        subscription,
+      ] of this.subscriptions.entries()) {
+        if (now - subscription.lastActivity > staleThreshold) {
+          console.warn(`Stale subscription detected: ${subscriptionId}`);
+          await this.reconnectSubscription(subscriptionId);
+        }
+      }
+
+      // Update connection status if healthy
+      if (this.connectionStatus !== "connected") {
+        this.connectionStatus = "connected";
+        for (const [, subscription] of this.subscriptions.entries()) {
+          subscription.config.onConnectionChange?.("connected");
+        }
+      }
+    } catch (error) {
+      console.error("Health check failed:", error);
+      this.connectionStatus = "disconnected";
     }
   }
 
   /**
    * Reconnect a stale subscription
    */
-  private static async reconnectSubscription(subscriptionId: string): Promise<void> {
+  private static async reconnectSubscription(
+    subscriptionId: string
+  ): Promise<void> {
     const subscription = this.subscriptions.get(subscriptionId);
     if (!subscription) {
       return;
     }
 
     console.log(`Reconnecting subscription: ${subscriptionId}`);
-    this.connectionStatus = 'reconnecting';
-    subscription.config.onConnectionChange?.('reconnecting');
+    this.connectionStatus = "reconnecting";
+    subscription.config.onConnectionChange?.("reconnecting");
 
     try {
-      await this.unsubscribe(subscriptionId);
-      await this.subscribe(subscriptionId, subscription.config);
+      // Stop current polling
+      if (subscription.pollTimer) {
+        clearInterval(subscription.pollTimer);
+      }
+
+      // Restart polling with fresh timestamp
+      subscription.lastPollTimestamp = new Date().toISOString();
+      subscription.lastActivity = Date.now();
+      this.startPolling(subscriptionId, subscription);
+
+      this.connectionStatus = "connected";
+      subscription.config.onConnectionChange?.("connected");
     } catch (error) {
-      console.error(`Failed to reconnect subscription ${subscriptionId}:`, error);
-      subscription.config.onError?.(error);
+      console.error(
+        `Failed to reconnect subscription ${subscriptionId}:`,
+        error
+      );
+      subscription.config.onError?.(error as Error);
     }
-  }
-
-  /**
-   * Setup global error handling
-   */
-  private static setupGlobalErrorHandling(): void {
-    // Handle Supabase connection errors
-    supabase.realtime.onOpen(() => {
-      this.connectionStatus = 'connected';
-      console.log('Supabase realtime connection opened');
-    });
-
-    supabase.realtime.onClose(() => {
-      this.connectionStatus = 'disconnected';
-      console.log('Supabase realtime connection closed');
-    });
-
-    supabase.realtime.onError((error) => {
-      this.connectionStatus = 'disconnected';
-      console.error('Supabase realtime error:', error);
-    });
   }
 
   /**
    * Transform raw data to VibeCheckWithDetails (optimized)
    */
-  private static transformToVibeCheckWithDetails(rawData: any): VibeCheckWithDetails {
+  private static transformToVibeCheckWithDetails(
+    rawData: any
+  ): VibeCheckWithDetails {
     const createdAt = new Date(rawData.created_at);
     const now = new Date();
-    const diffInMinutes = Math.floor((now.getTime() - createdAt.getTime()) / 60000);
+    const diffInMinutes = Math.floor(
+      (now.getTime() - createdAt.getTime()) / 60000
+    );
     const twoHoursAgo = new Date(now.getTime() - 7200000);
 
     // Optimized time ago calculation
@@ -592,21 +600,20 @@ export class OptimizedRealtimeService {
       id: rawData.id,
       venue_id: rawData.venue_id,
       user_id: rawData.user_id,
-      busyness_rating: rawData.busyness_rating,
+      rating: rawData.rating,
       comment: rawData.comment,
       photo_url: rawData.photo_url,
-      user_latitude: rawData.user_latitude,
-      user_longitude: rawData.user_longitude,
       created_at: rawData.created_at,
+      updated_at: rawData.updated_at,
       user: {
-        id: rawData.user.id,
-        name: rawData.user.name || "Anonymous",
-        avatar_url: rawData.user.avatar_url,
+        id: rawData.user_id,
+        name: rawData.user_name || "Anonymous",
+        avatar_url: rawData.user_avatar,
       },
       venue: {
-        id: rawData.venue.id,
-        name: rawData.venue.name || "Unknown Venue",
-        address: rawData.venue.address,
+        id: rawData.venue_id,
+        name: rawData.venue_name || "Unknown Venue",
+        address: rawData.venue_address,
       },
       time_ago: timeAgo,
       is_recent: createdAt > twoHoursAgo,

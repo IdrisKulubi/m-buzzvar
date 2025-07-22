@@ -1,6 +1,6 @@
 import * as FileSystem from 'expo-file-system';
-import { Image } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import React from 'react';
 
 export interface ImageCacheOptions {
   maxCacheSize?: number; // in MB
@@ -458,5 +458,3 @@ export const useCachedImage = (
   return { cachedUri, isLoading, error };
 };
 
-// Import React for the hook
-import React from 'react';

@@ -12,7 +12,7 @@ export interface UseFileUploadOptions {
 
 export interface UseFileUploadReturn {
   uploadPhoto: (photo: { uri: string; type: string; name: string }, userId: string) => Promise<PhotoUploadResult>
-  uploadPhotos: (photos: Array<{ uri: string; type: string; name: string }>, userId: string) => Promise<PhotoUploadResult[]>
+  uploadPhotos: (photos: { uri: string; type: string; name: string }[], userId: string) => Promise<PhotoUploadResult[]>
   deletePhoto: (photoUrl: string) => Promise<{ success: boolean; error: string | null }>
   isUploading: boolean
   progress: PhotoUploadProgress | null
@@ -63,7 +63,7 @@ export function useFileUpload(options: UseFileUploadOptions = {}): UseFileUpload
   }, [options])
 
   const uploadPhotos = useCallback(async (
-    photos: Array<{ uri: string; type: string; name: string }>,
+    photos: { uri: string; type: string; name: string }[],
     userId: string
   ): Promise<PhotoUploadResult[]> => {
     setIsUploading(true)

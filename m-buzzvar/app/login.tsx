@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import Button from '../src/components/Button';
-import { signInWithGoogle } from '../src/actions/better-auth-actions';
+import { signInWithGoogle } from '../src/actions/standalone-actions';
 import { Colors } from '../constants/Colors';
 
 const { width, height } = Dimensions.get('window');
@@ -20,21 +20,40 @@ export default function LoginPage() {
     setLoading(true);
     
     try {
-      const { data, error } = await signInWithGoogle();
+      const { user, error } = await signInWithGoogle();
 
       if (error) {
-        console.error('🔴 Login: Google login error:', JSON.stringify(error, null, 2));
-        Alert.alert('Login Failed', (error as any)?.message || 'An error occurred during Google login');
-      } else if (data?.user) {
-        console.log('🟢 Login: Google login successful for user:', data.user.email);
+        console.error('🔴 Login: Google login error:', error.message);
+        
+        // Show user-friendly error messages
+        if (error.message.includes('not available') || error.message.includes('install and configure')) {
+          Alert.alert(
+            'Google Sign-In Unavailable', 
+            'Google Sign-In is not properly configured. Please use email login or contact support.',
+            [{ text: 'OK' }]
+          );
+        } else if (error.message.includes('cancelled')) {
+          // Don't show alert for user cancellation
+          console.log('🟡 Login: User cancelled Google sign-in');
+        } else if (error.message.includes('Play Services')) {
+          Alert.alert(
+            'Google Play Services Required', 
+            'Please update Google Play Services to use Google Sign-In.',
+            [{ text: 'OK' }]
+          );
+        } else {
+          Alert.alert('Login Failed', error.message || 'An error occurred during Google login');
+        }
+      } else if (user) {
+        console.log('🟢 Login: Google login successful for user:', user.email);
         console.log('🔵 Login: User will be redirected to profile setup or main app based on profile status');
-        // Navigation will be handled by the index.tsx useEffect
+        // Navigation will be handled by the auth state change
       } else {
         console.log('🟡 Login: No error but no user data received');
         Alert.alert('Login Failed', 'No user data received');
       }
     } catch (error) {
-      console.error('🔴 Login: Unexpected error:', JSON.stringify(error, null, 2));
+      console.error('🔴 Login: Unexpected error:', error);
       Alert.alert('Login Failed', 'An unexpected error occurred');
     } finally {
       console.log('🔵 Login: Finished Google login process');

@@ -202,7 +202,7 @@ export class RealtimeServiceMobile {
   private setupPolling(channel: string, pollFunction: () => void): void {
     if (!this.pollingTimers.has(channel)) {
       const timer = setInterval(pollFunction, this.fallbackPollingInterval)
-      this.pollingTimers.set(channel, timer)
+      this.pollingTimers.set(channel, timer as any)
     }
   }
 
