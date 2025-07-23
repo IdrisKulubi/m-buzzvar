@@ -35,6 +35,7 @@ EXPO_PUBLIC_GOOGLE_MAPS_API_KEY=your_google_maps_api_key
 ### 4. Enable Authentication Providers (Optional)
 
 For Google OAuth:
+
 1. Go to Authentication > Providers in Supabase
 2. Enable Google provider
 3. Add your Google OAuth credentials
@@ -85,4 +86,4 @@ After running the schema and seed data:
 1. Set up the mobile app with the database credentials
 2. Test the authentication flow
 3. Implement the TikTok-style feed using the venues data
-4. Add real venue data for your target location 
+4. Add real venue data for your target location
