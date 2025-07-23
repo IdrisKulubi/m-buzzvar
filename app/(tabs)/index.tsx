@@ -8,19 +8,21 @@ import {
   RefreshControl,
   useColorScheme,
   TouchableOpacity,
-  ActivityIndicator,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Image } from 'expo-image'
 import { Colors } from '@/constants/Colors'
 import { useAuth } from '@/src/lib/hooks'
 import { getUserProfile } from '@/src/actions/auth'
-import { getVenues, getUserBookmarks, VenueWithDistance } from '@/src/actions/clubs'
+import { getVenues, getUserBookmarks, getVenueReviewStats, VenueWithDistance } from '@/src/actions/clubs'
+import LiveIndicator from '@/components/LiveIndicator'
 import { Ionicons } from '@expo/vector-icons'
 import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '@/src/lib/supabase'
 import { BottomSheetModal } from '@gorhom/bottom-sheet'
 import VenueDetailsSheet from '@/components/VenueDetailsSheet'
+import VibesSection from '@/components/VibesSection'
+import HomeScreenSkeleton from '@/components/skeletons/HomeScreenSkeleton'
 
 interface UserProfile {
   id: string
@@ -46,7 +48,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [featuredVenues, setFeaturedVenues] = useState<VenueWithDistance[]>([])
-  const [bookmarkedVenues, setBookmarkedVenues] = useState<VenueWithDistance[]>([])
+  const [bookmarkedVenues, setBookmarkedVenues] = useState<any[]>([])
   
   // Bottom Sheet state
   const [selectedVenue, setSelectedVenue] = useState<any | null>(null)
@@ -67,18 +69,10 @@ export default function HomeScreen() {
     try {
       const [profileResult, venuesResult, bookmarksResult] = await Promise.all([
         getUserProfile(user.id),
-        // Fetch venues with promotions for the featured section
-        supabase
-          .from('venues')
-          .select('*, promotions(*)')
-          .order('created_at', { ascending: false })
-          .limit(10),
-        // Fetch bookmarked venues with their details and promotions
-        supabase
-          .from('user_bookmarks')
-          .select('venues(*, promotions(*))')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false }),
+        // Use the updated getVenues function that includes vibe check data
+        getVenues(),
+        // Use the getUserBookmarks function instead of direct query
+        getUserBookmarks(user.id),
       ])
 
       if (profileResult.error) console.error('Error loading profile:', profileResult.error)
@@ -88,15 +82,43 @@ export default function HomeScreen() {
         console.error('Error fetching venues:', venuesResult.error)
       } else {
         const allVenues = venuesResult.data as VenueWithDistance[]
-        const featured = allVenues.filter(v => v.promotions && v.promotions.length > 0)
-        setFeaturedVenues(featured.length > 0 ? featured : allVenues.slice(0, 5))
+        
+        // Fetch promotions for each venue
+        const venuesWithPromotions = await Promise.all(
+          allVenues.map(async (venue) => {
+            const { data: promotions } = await supabase
+              .from('promotions')
+              .select('*')
+              .eq('venue_id', venue.id)
+              .eq('is_active', true);
+            
+            return {
+              ...venue,
+              promotions: promotions || [],
+            };
+          })
+        );
+        
+        const featured = venuesWithPromotions.filter(v => v.promotions && v.promotions.length > 0)
+        setFeaturedVenues(featured.length > 0 ? featured : venuesWithPromotions.slice(0, 5))
       }
       
       if (bookmarksResult.error) {
         console.error('Error fetching bookmarks:', bookmarksResult.error)
       } else {
-        const bookmarks = bookmarksResult.data?.map((b: any) => b.venues) || []
-        setBookmarkedVenues(bookmarks)
+        // Add review stats to each bookmarked venue
+        const bookmarksWithStats = await Promise.all(
+          (bookmarksResult.data || []).map(async (venue: any) => {
+            // Get review stats for this venue using our helper function
+            const reviewStats = await getVenueReviewStats(venue.id);
+            return {
+              ...venue,
+              review_count: reviewStats.count,
+              average_rating: reviewStats.average,
+            };
+          })
+        );
+        setBookmarkedVenues(bookmarksWithStats)
       }
 
     } catch (error) {
@@ -124,11 +146,7 @@ export default function HomeScreen() {
       flex: 1,
       backgroundColor: colors.background,
     },
-    loadingContainer: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
+
     scrollContent: {
       paddingVertical: 20,
       paddingBottom: 120, // Extra padding for tab bar
@@ -220,6 +238,12 @@ export default function HomeScreen() {
       fontSize: 12,
       fontWeight: 'bold',
     },
+    liveIndicatorContainer: {
+      position: 'absolute',
+      top: 12,
+      right: 12,
+      zIndex: 1,
+    },
     groupCard: {
       backgroundColor: colors.surface,
       borderRadius: 12,
@@ -284,11 +308,7 @@ export default function HomeScreen() {
   })
 
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.tint} />
-      </View>
-    )
+    return <HomeScreenSkeleton />;
   }
 
   return (
@@ -330,6 +350,17 @@ export default function HomeScreen() {
                     <Text style={styles.promotionText}>Promotion</Text>
                   </View>
                 )}
+                {/* Live indicator positioned in top right */}
+                {(venue.has_live_activity || venue.recent_vibe_count > 0) && (
+                  <View style={styles.liveIndicatorContainer}>
+                    <LiveIndicator
+                      hasLiveActivity={venue.has_live_activity}
+                      averageBusyness={venue.average_recent_busyness}
+                      recentVibeCount={venue.recent_vibe_count}
+                      size="small"
+                    />
+                  </View>
+                )}
                 <View style={styles.featuredContent}>
                   <Text style={styles.featuredTitle} numberOfLines={1}>{venue.name}</Text>
                   <Text style={styles.featuredAddress} numberOfLines={1}>{venue.address}</Text>
@@ -338,31 +369,9 @@ export default function HomeScreen() {
             ))}
           </ScrollView>
         </View>
-        
-        {/* Your Groups */}
-        <View style={styles.sectionContainer}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Your Groups</Text>
-            <TouchableOpacity 
-              style={styles.seeAllButton}
-              onPress={() => router.push('/(tabs)/groups')}
-            >
-              <Text style={styles.seeAllText}>See All</Text>
-            </TouchableOpacity>
-          </View>
-          {dummyGroups.map((group) => (
-            <TouchableOpacity key={group.id} style={styles.groupCard}>
-              <View style={styles.groupIcon}>
-                <Ionicons name="people" size={24} color={colors.background} />
-              </View>
-              <View style={styles.groupInfo}>
-                <Text style={styles.groupName}>{group.name}</Text>
-                <Text style={styles.groupDetails}>{group.members} members • {group.venue}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={22} color={colors.muted} />
-            </TouchableOpacity>
-          ))}
-        </View>
+
+        {/* Live Vibes Section */}
+        <VibesSection onRefresh={loadDashboardData} />
 
         {/* Bookmarked Venues */}
         <View style={styles.sectionContainer}>
@@ -400,7 +409,12 @@ export default function HomeScreen() {
         }}
         handleIndicatorStyle={{ backgroundColor: colors.muted }}
       >
-        {selectedVenue && <VenueDetailsSheet venue={selectedVenue} />}
+        {selectedVenue && (
+          <VenueDetailsSheet 
+            venue={selectedVenue} 
+            onDataNeedsRefresh={loadDashboardData}
+          />
+        )}
       </BottomSheetModal>
     </SafeAreaView>
   )
